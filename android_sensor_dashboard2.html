@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Android multi-sensor dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --panel-2: #172238;
+      --text: #e8eefc;
+      --muted: #9eb0d1;
+      --accent: #7fb3ff;
+      --good: #69d39f;
+      --warn: #ffc76a;
+      --bad: #ff8f8f;
+      --border: #253453;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, #09101c 0%, #0f1728 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1380px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.5rem;
+    }
+
+    p {
+      color: var(--muted);
+      line-height: 1.45;
+      margin-top: 0;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      background: rgba(18, 26, 43, 0.96);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 14px 0 18px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #08111f;
+    }
+
+    button.good { background: var(--good); color: #08111f; }
+    button.warn { background: var(--warn); color: #08111f; }
+    button.bad { background: var(--bad); color: #08111f; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .stat {
+      background: rgba(23, 34, 56, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      min-height: 66px;
+    }
+
+    .label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+    }
+
+    .value {
+      font-size: 1rem;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .chart-wrap {
+      height: 250px;
+      position: relative;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #0d1628;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+
+    .status {
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .small {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .log {
+      max-height: 200px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+      background: #0d1628;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+
+    .sensor-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    .sensor-table th,
+    .sensor-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 8px 6px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    .sensor-table th {
+      color: var(--muted);
+      font-weight: 600;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: #10203b;
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-size: 0.75rem;
+    }
+
+    @media (max-width: 640px) {
+      .stat-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Android multi-sensor dashboard</h1>
+    <p>
+      This page reads available browser-accessible sensors from an Android phone, including GPS, accelerometer, gyroscope, ambient light and barometric pressure where supported.
+      It plots live accelerometer and gyroscope data and exports all captured samples to CSV.
+      Open it in Chrome on Android over HTTPS or localhost. Sensor support depends heavily on the device and browser.
+    </p>
+
+    <div class="controls">
+      <button id="startBtn" class="primary">Start sensors</button>
+      <button id="stopBtn">Stop sensors</button>
+      <button id="clearBtn">Clear data</button>
+      <button id="exportBtn" class="good">Export CSV</button>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Live status</h2>
+        <p class="small">State: <span id="status" class="status">Idle</span></p>
+        <div class="stat-grid">
+          <div class="stat"><span class="label">Accel X (m/s²)</span><span id="ax" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Accel Y (m/s²)</span><span id="ay" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Accel Z (m/s²)</span><span id="az" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Accel magnitude (m/s²)</span><span id="amag" class="value">0.000</span></div>
+
+          <div class="stat"><span class="label">Gyro X (deg/s)</span><span id="gx" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Gyro Y (deg/s)</span><span id="gy" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Gyro Z (deg/s)</span><span id="gz" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Rotation magnitude</span><span id="gmag" class="value">0.000</span></div>
+
+          <div class="stat"><span class="label">Latitude</span><span id="lat" class="value">-</span></div>
+          <div class="stat"><span class="label">Longitude</span><span id="lon" class="value">-</span></div>
+          <div class="stat"><span class="label">GPS speed (m/s)</span><span id="speed" class="value">-</span></div>
+          <div class="stat"><span class="label">Accuracy (m)</span><span id="accuracy" class="value">-</span></div>
+
+          <div class="stat"><span class="label">Altitude (m)</span><span id="altitude" class="value">-</span></div>
+          <div class="stat"><span class="label">Heading (deg)</span><span id="heading" class="value">-</span></div>
+          <div class="stat"><span class="label">Ambient light (lux)</span><span id="light" class="value">-</span></div>
+          <div class="stat"><span class="label">Pressure (hPa)</span><span id="pressure" class="value">-</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Acceleration plot</h2>
+        <div class="chart-wrap">
+          <canvas id="accelChart" width="900" height="250"></canvas>
+        </div>
+        <p class="small">Shows the last 30 seconds of acceleration data for X, Y and Z.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Gyroscope plot</h2>
+        <div class="chart-wrap">
+          <canvas id="gyroChart" width="900" height="250"></canvas>
+        </div>
+        <p class="small">Shows the last 30 seconds of rotation rate data for X, Y and Z.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Session summary</h2>
+        <div class="stat-grid">
+          <div class="stat"><span class="label">Motion samples</span><span id="motionCount" class="value">0</span></div>
+          <div class="stat"><span class="label">GPS samples</span><span id="gpsCount" class="value">0</span></div>
+          <div class="stat"><span class="label">Light samples</span><span id="lightCount" class="value">0</span></div>
+          <div class="stat"><span class="label">Pressure samples</span><span id="pressureCount" class="value">0</span></div>
+          <div class="stat"><span class="label">Elapsed (s)</span><span id="elapsed" class="value">0.0</span></div>
+          <div class="stat"><span class="label">Approx. distance (m)</span><span id="distance" class="value">0.0</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Sensor support</h2>
+        <table class="sensor-table">
+          <thead>
+            <tr>
+              <th>Sensor</th>
+              <th>Status</th>
+              <th>Notes</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>Geolocation</td><td id="geoSupport"><span class="tag">Unknown</span></td><td>Browser GPS access</td></tr>
+            <tr><td>Device motion</td><td id="motionSupport"><span class="tag">Unknown</span></td><td>Accelerometer and gyroscope via browser events</td></tr>
+            <tr><td>Ambient light</td><td id="lightSupport"><span class="tag">Unknown</span></td><td>Usually unavailable on many Android browsers</td></tr>
+            <tr><td>Barometer</td><td id="pressureSupport"><span class="tag">Unknown</span></td><td>Requires Generic Sensor API support</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <h2>Debug log</h2>
+        <div id="log" class="log"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      running: false,
+      motionListener: null,
+      watchId: null,
+      startTime: null,
+      motionSamples: [],
+      gpsSamples: [],
+      lightSamples: [],
+      pressureSamples: [],
+      chartWindowMs: 30000,
+      maxSamples: 12000,
+      distanceMeters: 0,
+      lastGps: null,
+      animationFrame: null,
+      sensors: {
+        ambientLight: null,
+        pressure: null
+      }
+    };
+
+    const els = {
+      status: document.getElementById('status'),
+      ax: document.getElementById('ax'),
+      ay: document.getElementById('ay'),
+      az: document.getElementById('az'),
+      amag: document.getElementById('amag'),
+      gx: document.getElementById('gx'),
+      gy: document.getElementById('gy'),
+      gz: document.getElementById('gz'),
+      gmag: document.getElementById('gmag'),
+      lat: document.getElementById('lat'),
+      lon: document.getElementById('lon'),
+      speed: document.getElementById('speed'),
+      accuracy: document.getElementById('accuracy'),
+      altitude: document.getElementById('altitude'),
+      heading: document.getElementById('heading'),
+      light: document.getElementById('light'),
+      pressure: document.getElementById('pressure'),
+      motionCount: document.getElementById('motionCount'),
+      gpsCount: document.getElementById('gpsCount'),
+      lightCount: document.getElementById('lightCount'),
+      pressureCount: document.getElementById('pressureCount'),
+      elapsed: document.getElementById('elapsed'),
+      distance: document.getElementById('distance'),
+      log: document.getElementById('log'),
+      accelChart: document.getElementById('accelChart'),
+      gyroChart: document.getElementById('gyroChart'),
+      geoSupport: document.getElementById('geoSupport'),
+      motionSupport: document.getElementById('motionSupport'),
+      lightSupport: document.getElementById('lightSupport'),
+      pressureSupport: document.getElementById('pressureSupport')
+    };
+
+    function log(message) {
+      const stamp = new Date().toLocaleTimeString();
+      els.log.textContent = `[${stamp}] ${message}\n` + els.log.textContent;
+    }
+
+    function setStatus(text) {
+      els.status.textContent = text;
+    }
+
+    function supportTag(ok, text) {
+      const label = text || (ok ? 'Available' : 'Not available');
+      return `<span class="tag">${label}</span>`;
+    }
+
+    function detectSupport() {
+      els.geoSupport.innerHTML = supportTag('geolocation' in navigator, ('geolocation' in navigator) ? 'Available' : 'Not available');
+      els.motionSupport.innerHTML = supportTag(typeof DeviceMotionEvent !== 'undefined', (typeof DeviceMotionEvent !== 'undefined') ? 'Available' : 'Not available');
+      els.lightSupport.innerHTML = supportTag('AmbientLightSensor' in window, ('AmbientLightSensor' in window) ? 'API found' : 'API missing');
+      els.pressureSupport.innerHTML = supportTag('Barometer' in window, ('Barometer' in window) ? 'API found' : 'API missing');
+    }
+
+    function formatNumber(v, digits = 3) {
+      return Number.isFinite(v) ? v.toFixed(digits) : '-';
+    }
+
+    function updateSummary() {
+      els.motionCount.textContent = String(state.motionSamples.length);
+      els.gpsCount.textContent = String(state.gpsSamples.length);
+      els.lightCount.textContent = String(state.lightSamples.length);
+      els.pressureCount.textContent = String(state.pressureSamples.length);
+      const elapsed = state.startTime ? (performance.now() - state.startTime) / 1000 : 0;
+      els.elapsed.textContent = elapsed.toFixed(1);
+      els.distance.textContent = state.distanceMeters.toFixed(1);
+    }
+
+    function haversineMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = deg => deg * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    }
+
+    function keepLast(arr, max) {
+      if (arr.length > max) arr.splice(0, arr.length - max);
+    }
+
+    function addMotionSample(sample) {
+      state.motionSamples.push(sample);
+      keepLast(state.motionSamples, state.maxSamples);
+    }
+
+    function addGpsSample(sample) {
+      if (state.lastGps) {
+        state.distanceMeters += haversineMeters(state.lastGps.lat, state.lastGps.lon, sample.lat, sample.lon);
+      }
+      state.lastGps = sample;
+      state.gpsSamples.push(sample);
+      keepLast(state.gpsSamples, state.maxSamples);
+    }
+
+    function addLightSample(sample) {
+      state.lightSamples.push(sample);
+      keepLast(state.lightSamples, state.maxSamples);
+    }
+
+    function addPressureSample(sample) {
+      state.pressureSamples.push(sample);
+      keepLast(state.pressureSamples, state.maxSamples);
+    }
+
+    function resizeCanvasToDisplaySize(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const width = Math.round(rect.width * dpr);
+      const height = Math.round(rect.height * dpr);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      return { width, height };
+    }
+
+    function drawThreeAxisChart(canvas, samples, title, keys, limit) {
+      const ctx = canvas.getContext('2d');
+      const { width, height } = resizeCanvasToDisplaySize(canvas);
+      ctx.clearRect(0, 0, width, height);
+      ctx.fillStyle = '#0d1628';
+      ctx.fillRect(0, 0, width, height);
+
+      const padding = 40;
+      const plotW = width - padding * 2;
+      const plotH = height - padding * 2;
+      const now = performance.now();
+      const windowStart = now - state.chartWindowMs;
+      const view = samples.filter(s => s.t >= windowStart);
+
+      ctx.strokeStyle = '#2d3b5a';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = padding + i * (plotH / 4);
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(padding + plotW, y);
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(padding, padding + plotH / 2);
+      ctx.lineTo(padding + plotW, padding + plotH / 2);
+      ctx.strokeStyle = '#8fa7d6';
+      ctx.stroke();
+
+      ctx.fillStyle = '#9eb0d1';
+      ctx.font = `${Math.max(12, Math.round(width / 60))}px system-ui`;
+      ctx.fillText(`${title}, last 30 s`, padding, padding - 12);
+      ctx.fillText(`+${limit}`, 6, padding + 8);
+      ctx.fillText('0', 16, padding + plotH / 2 + 4);
+      ctx.fillText(`-${limit}`, 6, padding + plotH - 4);
+
+      if (view.length < 2) {
+        ctx.fillText('Waiting for data...', padding + 20, padding + plotH / 2);
+        return;
+      }
+
+      const toX = t => padding + ((t - windowStart) / state.chartWindowMs) * plotW;
+      const toY = v => padding + plotH * (0.5 - Math.max(-limit, Math.min(limit, v)) / (2 * limit));
+      const colours = ['#7fb3ff', '#69d39f', '#ffc76a'];
+
+      keys.forEach((key, index) => {
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = colours[index];
+        view.forEach((s, i) => {
+          const x = toX(s.t);
+          const y = toY(s[key]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      });
+
+      ['X', 'Y', 'Z'].forEach((label, index) => {
+        ctx.fillStyle = colours[index];
+        ctx.fillText(label, width - (90 - index * 30), padding - 12);
+      });
+    }
+
+    function drawCharts() {
+      drawThreeAxisChart(els.accelChart, state.motionSamples, 'Acceleration', ['ax', 'ay', 'az'], 20);
+      drawThreeAxisChart(els.gyroChart, state.motionSamples, 'Gyroscope', ['gx', 'gy', 'gz'], 250);
+    }
+
+    function animationLoop() {
+      drawCharts();
+      updateSummary();
+      state.animationFrame = requestAnimationFrame(animationLoop);
+    }
+
+    function handleMotion(event) {
+      const acc = event.accelerationIncludingGravity || event.acceleration || {};
+      const rot = event.rotationRate || {};
+      const ax = Number(acc.x ?? 0);
+      const ay = Number(acc.y ?? 0);
+      const az = Number(acc.z ?? 0);
+      const gx = Number(rot.alpha ?? 0);
+      const gy = Number(rot.beta ?? 0);
+      const gz = Number(rot.gamma ?? 0);
+      const amag = Math.sqrt(ax * ax + ay * ay + az * az);
+      const gmag = Math.sqrt(gx * gx + gy * gy + gz * gz);
+      const t = performance.now();
+      const iso = new Date().toISOString();
+
+      addMotionSample({
+        type: 'motion',
+        t,
+        iso,
+        ax,
+        ay,
+        az,
+        amag,
+        gx,
+        gy,
+        gz,
+        gmag,
+        intervalMs: Number(event.interval ?? 0)
+      });
+
+      els.ax.textContent = formatNumber(ax);
+      els.ay.textContent = formatNumber(ay);
+      els.az.textContent = formatNumber(az);
+      els.amag.textContent = formatNumber(amag);
+      els.gx.textContent = formatNumber(gx);
+      els.gy.textContent = formatNumber(gy);
+      els.gz.textContent = formatNumber(gz);
+      els.gmag.textContent = formatNumber(gmag);
+    }
+
+    function handleGps(position) {
+      const c = position.coords;
+      const sample = {
+        type: 'gps',
+        t: performance.now(),
+        iso: new Date().toISOString(),
+        lat: c.latitude,
+        lon: c.longitude,
+        speed: c.speed,
+        accuracy: c.accuracy,
+        altitude: c.altitude,
+        altitudeAccuracy: c.altitudeAccuracy,
+        heading: c.heading
+      };
+
+      addGpsSample(sample);
+
+      els.lat.textContent = formatNumber(sample.lat, 6);
+      els.lon.textContent = formatNumber(sample.lon, 6);
+      els.speed.textContent = formatNumber(sample.speed, 2);
+      els.accuracy.textContent = formatNumber(sample.accuracy, 1);
+      els.altitude.textContent = formatNumber(sample.altitude, 1);
+      els.heading.textContent = formatNumber(sample.heading, 1);
+    }
+
+    function handleGpsError(error) {
+      log(`GPS error ${error.code}: ${error.message}`);
+    }
+
+    async function requestMotionPermissionIfNeeded() {
+      if (typeof DeviceMotionEvent === 'undefined') {
+        throw new Error('DeviceMotionEvent is not supported on this device/browser.');
+      }
+
+      if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        const result = await DeviceMotionEvent.requestPermission();
+        if (result !== 'granted') {
+          throw new Error('Motion permission was not granted.');
+        }
+      }
+    }
+
+    function startGps() {
+      if (!('geolocation' in navigator)) {
+        throw new Error('Geolocation is not supported in this browser.');
+      }
+
+      state.watchId = navigator.geolocation.watchPosition(handleGps, handleGpsError, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000
+      });
+    }
+
+    function startGenericSensor(name, SensorCtor, onReading, onError, options = { frequency: 5 }) {
+      try {
+        const sensor = new SensorCtor(options);
+        sensor.addEventListener('reading', onReading);
+        sensor.addEventListener('error', onError);
+        sensor.start();
+        state.sensors[name] = sensor;
+        log(`${name} sensor started.`);
+        return true;
+      } catch (error) {
+        log(`${name} sensor failed to start: ${error.message || error}`);
+        return false;
+      }
+    }
+
+    function startAmbientLight() {
+      if (!('AmbientLightSensor' in window)) {
+        log('Ambient light sensor API not available.');
+        return;
+      }
+
+      startGenericSensor(
+        'ambientLight',
+        AmbientLightSensor,
+        () => {
+          const sensor = state.sensors.ambientLight;
+          if (!sensor) return;
+          const sample = {
+            type: 'light',
+            t: performance.now(),
+            iso: new Date().toISOString(),
+            illuminance: Number(sensor.illuminance ?? NaN)
+          };
+          addLightSample(sample);
+          els.light.textContent = formatNumber(sample.illuminance, 1);
+        },
+        event => log(`Ambient light error: ${event.error?.message || 'unknown error'}`),
+        { frequency: 2 }
+      );
+    }
+
+    function startPressure() {
+      if (!('Barometer' in window)) {
+        log('Barometer API not available.');
+        return;
+      }
+
+      startGenericSensor(
+        'pressure',
+        Barometer,
+        () => {
+          const sensor = state.sensors.pressure;
+          if (!sensor) return;
+          const sample = {
+            type: 'pressure',
+            t: performance.now(),
+            iso: new Date().toISOString(),
+            pressure: Number(sensor.pressure ?? NaN)
+          };
+          addPressureSample(sample);
+          els.pressure.textContent = formatNumber(sample.pressure, 2);
+        },
+        event => log(`Pressure error: ${event.error?.message || 'unknown error'}`),
+        { frequency: 2 }
+      );
+    }
+
+    function stopGenericSensors() {
+      Object.keys(state.sensors).forEach(key => {
+        const sensor = state.sensors[key];
+        if (sensor) {
+          try {
+            sensor.stop();
+          } catch (_) {}
+          state.sensors[key] = null;
+        }
+      });
+    }
+
+    function stopSensors() {
+      if (state.motionListener) {
+        window.removeEventListener('devicemotion', state.motionListener);
+        state.motionListener = null;
+      }
+
+      if (state.watchId !== null) {
+        navigator.geolocation.clearWatch(state.watchId);
+        state.watchId = null;
+      }
+
+      stopGenericSensors();
+
+      if (state.animationFrame) {
+        cancelAnimationFrame(state.animationFrame);
+        state.animationFrame = null;
+      }
+
+      state.running = false;
+      setStatus('Stopped');
+      log('Sensors stopped.');
+    }
+
+    async function startSensors() {
+      if (state.running) return;
+      try {
+        setStatus('Requesting permissions');
+        await requestMotionPermissionIfNeeded();
+
+        state.motionListener = handleMotion;
+        window.addEventListener('devicemotion', state.motionListener, { passive: true });
+        startGps();
+        startAmbientLight();
+        startPressure();
+
+        state.running = true;
+        if (!state.startTime) state.startTime = performance.now();
+        setStatus('Running');
+        log('Sensors started.');
+
+        if (!state.animationFrame) animationLoop();
+      } catch (error) {
+        setStatus('Error');
+        log(error.message || String(error));
+      }
+    }
+
+    function clearData() {
+      state.motionSamples = [];
+      state.gpsSamples = [];
+      state.lightSamples = [];
+      state.pressureSamples = [];
+      state.startTime = state.running ? performance.now() : null;
+      state.distanceMeters = 0;
+      state.lastGps = null;
+
+      ['ax','ay','az','amag','gx','gy','gz','gmag'].forEach(id => els[id].textContent = '0.000');
+      ['lat','lon','speed','accuracy','altitude','heading','light','pressure'].forEach(id => els[id].textContent = '-');
+      updateSummary();
+      drawCharts();
+      log('Data cleared.');
+    }
+
+    function exportCsv() {
+      const header = [
+        'type','timestamp','ax','ay','az','amag','gx','gy','gz','gmag','interval_ms',
+        'lat','lon','speed','accuracy','altitude','altitude_accuracy','heading','illuminance_lux','pressure_hpa'
+      ].join(',') + '\n';
+
+      const motionRows = state.motionSamples.map(s => [
+        s.type, s.iso, s.ax, s.ay, s.az, s.amag, s.gx, s.gy, s.gz, s.gmag, s.intervalMs,
+        '', '', '', '', '', '', '', '', ''
+      ].join(','));
+
+      const gpsRows = state.gpsSamples.map(s => [
+        s.type, s.iso, '', '', '', '', '', '', '', '', '',
+        s.lat, s.lon, s.speed ?? '', s.accuracy ?? '', s.altitude ?? '', s.altitudeAccuracy ?? '', s.heading ?? '', '', ''
+      ].join(','));
+
+      const lightRows = state.lightSamples.map(s => [
+        s.type, s.iso, '', '', '', '', '', '', '', '', '',
+        '', '', '', '', '', '', '', s.illuminance, ''
+      ].join(','));
+
+      const pressureRows = state.pressureSamples.map(s => [
+        s.type, s.iso, '', '', '', '', '', '', '', '', '',
+        '', '', '', '', '', '', '', '', s.pressure
+      ].join(','));
+
+      const csv = header + [...motionRows, ...gpsRows, ...lightRows, ...pressureRows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      a.href = url;
+      a.download = `multi-sensor-data-${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      log('CSV exported.');
+    }
+
+    document.getElementById('startBtn').addEventListener('click', startSensors);
+    document.getElementById('stopBtn').addEventListener('click', stopSensors);
+    document.getElementById('clearBtn').addEventListener('click', clearData);
+    document.getElementById('exportBtn').addEventListener('click', exportCsv);
+    window.addEventListener('resize', drawCharts);
+
+    detectSupport();
+    drawCharts();
+    updateSummary();
+    log('Ready. Tap Start sensors to begin.');
+    log('Note: ambient light and pressure are browser and hardware dependent. Many phones will not expose them to web pages.');
+  </script>
+</body>
+</html>
