@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>High-Freq IMU & GPS Logger</title>
+    
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <style>
+        body { font-family: sans-serif; margin: 10px; background: #f4f4f4; }
+        .card { background: white; padding: 15px; border-radius: 8px; margin-bottom: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        #map { height: 250px; width: 100%; border-radius: 8px; }
+        .stats { display: flex; justify-content: space-between; font-size: 0.8em; color: #666; }
+        button { padding: 12px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; width: 100%; margin-bottom: 5px; }
+        .btn-start { background: #28a745; color: white; }
+        .btn-stop { background: #dc3545; color: white; }
+        .btn-download { background: #007bff; color: white; }
+        canvas { max-height: 200px; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>IMU & GPS Collector</h2>
+        <button id="startBtn" class="btn-start">Start Sensors</button>
+        <button id="stopBtn" class="btn-stop" style="display:none;">Stop & Save</button>
+        <div class="stats">
+            <p>IMU Rate: <span id="rate">0</span> Hz</p>
+            <p>Data Points: <span id="count">0</span></p>
+        </div>
+    </div>
+
+    <div class="card">
+        <canvas id="imuChart"></canvas>
+    </div>
+
+    <div class="card">
+        <div id="map"></div>
+        <p id="gpsInfo" style="font-size: 0.8em; margin-top: 5px;">GPS: Waiting for fix...</p>
+    </div>
+
+<script>
+    let isRecording = false;
+    let dataLog = [];
+    let lastTimestamp = 0;
+    let sampleCount = 0;
+    
+    // UI Elements
+    const startBtn = document.getElementById('startBtn');
+    const stopBtn = document.getElementById('stopBtn');
+    const rateDisplay = document.getElementById('rate');
+    const countDisplay = document.getElementById('count');
+    const gpsDisplay = document.getElementById('gpsInfo');
+
+    // Chart Setup
+    const ctx = document.getElementById('imuChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'Acc X', borderColor: 'red', data: [], borderWidth: 1, pointRadius: 0 },
+                { label: 'Acc Y', borderColor: 'green', data: [], borderWidth: 1, pointRadius: 0 },
+                { label: 'Acc Z', borderColor: 'blue', data: [], borderWidth: 1, pointRadius: 0 }
+            ]
+        },
+        options: { animation: false, scales: { x: { display: false } } }
+    });
+
+    // Map Setup
+    const map = L.map('map').setView([0, 0], 2);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+    const marker = L.marker([0, 0]).addTo(map);
+
+    async function requestPermissions() {
+        // iOS 13+ requires explicit permission for DeviceMotionEvent
+        if (typeof DeviceMotionEvent.requestPermission === 'function') {
+            const response = await DeviceMotionEvent.requestPermission();
+            if (response !== 'granted') {
+                alert('Permission denied by user');
+                return false;
+            }
+        }
+        return true;
+    }
+
+    startBtn.onclick = async () => {
+        const granted = await requestPermissions();
+        if (!granted) return;
+
+        isRecording = true;
+        dataLog = [];
+        startBtn.style.display = 'none';
+        stopBtn.style.display = 'block';
+
+        // 1. IMU SENSORS (Accelerometer)
+        // Note: devicemotion is the most cross-platform way to get high freq
+        window.addEventListener('devicemotion', (event) => {
+            if (!isRecording) return;
+
+            const now = performance.now();
+            const dt = now - lastTimestamp;
+            lastTimestamp = now;
+
+            const acc = event.accelerationIncludingGravity;
+            const gyro = event.rotationRate;
+
+            const entry = {
+                timestamp: Date.now(),
+                ax: acc.x, ay: acc.y, az: acc.z,
+                gx: gyro?.alpha || 0, gy: gyro?.beta || 0, gz: gyro?.gamma || 0,
+                lat: currentLat, lon: currentLon
+            };
+
+            dataLog.push(entry);
+            sampleCount++;
+
+            // Update UI/Chart every ~10 samples to save CPU
+            if (sampleCount % 10 === 0) {
+                rateDisplay.innerText = Math.round(1000 / dt);
+                countDisplay.innerText = dataLog.length;
+                updateChart(acc.x, acc.y, acc.z);
+            }
+        }, true);
+
+        // 2. GPS TRACKING
+        navigator.geolocation.watchPosition((pos) => {
+            currentLat = pos.coords.latitude;
+            currentLon = pos.coords.longitude;
+            const latlng = [currentLat, currentLon];
+            marker.setLatLng(latlng);
+            map.setView(latlng, 15);
+            gpsDisplay.innerText = `Lat: ${currentLat.toFixed(5)}, Lon: ${currentLon.toFixed(5)} (+/- ${pos.coords.accuracy}m)`;
+        }, (err) => console.error(err), { enableHighAccuracy: true });
+    };
+
+    let currentLat = 0, currentLon = 0;
+
+    function updateChart(x, y, z) {
+        chart.data.labels.push("");
+        chart.data.datasets[0].data.push(x);
+        chart.data.datasets[1].data.push(y);
+        chart.data.datasets[2].data.push(z);
+        if (chart.data.labels.length > 50) {
+            chart.data.labels.shift();
+            chart.data.datasets.forEach(d => d.data.shift());
+        }
+        chart.update('none'); // Update without animation for speed
+    }
+
+    stopBtn.onclick = () => {
+        isRecording = false;
+        window.removeEventListener('devicemotion', null);
+        downloadCSV();
+        startBtn.style.display = 'block';
+        stopBtn.style.display = 'none';
+    };
+
+    function downloadCSV() {
+        let csvContent = "data:text/csv;charset=utf-8,Timestamp,AccX,AccY,AccZ,GyroX,GyroY,GyroZ,Lat,Lon\n";
+        dataLog.forEach(e => {
+            csvContent += `${e.timestamp},${e.ax},${e.ay},${e.az},${e.gx},${e.gy},${e.gz},${e.lat},${e.lon}\n`;
+        });
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `sensor_data_${Date.now()}.csv`);
+        document.body.appendChild(link);
+        link.click();
+    }
+</script>
+</body>
+</html>
