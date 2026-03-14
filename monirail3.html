@@ -331,8 +331,7 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
 
 <script>
 /* Signal processing module - proprietary MoniRail Ltd */
-;(function(){
-"use strict";
+/* Signal processing module - proprietary MoniRail Ltd */
 function biquadBilinear(_WWOgaQwk, _bNhdJcsp, fs) {
  const K=2*fs, _GhPQSgUcA=K*K;
  const _vEvHtH_=_WWOgaQwk[0]||0, _USjOFOuP=_WWOgaQwk[1]||0, _a1lr1ZIMh=_WWOgaQwk[2]||0;
@@ -386,7 +385,6 @@ class RollingRMS {
  resize(N){this._r(N);}
  reset(){this.buf.fill(0);this.idx=0;this.sum=0;this.n=0;}
 }
-})();
 // ============================================================
 // STATE
 // ============================================================
