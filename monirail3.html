@@ -210,12 +210,13 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
       <span>Live Indices</span>
       <span class="card-hdr-accent" id="fsDisplay">Fs — Hz</span>
     </div>
+    <!-- Top row: speed | Ccz + Ccy | traffic light -->
     <div class="top-row">
       <div>
         <canvas id="speedCanvas" width="90" height="80"></canvas>
         <div class="speed-lbl">mph</div>
       </div>
-      <div class="val-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">
         <div class="vbox good" id="boxCcz">
           <div class="vlbl">CCZ</div>
           <div class="vnum good" id="numCcz">—</div>
@@ -228,26 +229,6 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
           <div class="vunit">m/s²</div>
           <div class="vdesc">Lateral</div>
         </div>
-        <div class="vbox good" id="boxCcx">
-          <div class="vlbl">CCX</div>
-          <div class="vnum good" id="numCcx">—</div>
-          <div class="vunit">m/s²</div>
-          <div class="vdesc">Longitudinal</div>
-        </div>
-      </div>
-      <div class="val-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px">
-        <div class="vbox good" id="boxPct">
-          <div class="vlbl">Pct</div>
-          <div class="vnum good" id="numPct">—</div>
-          <div class="vunit">%</div>
-          <div class="vdesc">Curve Transition</div>
-        </div>
-        <div class="vbox good" id="boxPde">
-          <div class="vlbl">Pde</div>
-          <div class="vnum good" id="numPde">0%</div>
-          <div class="vunit">%</div>
-          <div class="vdesc">Discrete Jolts</div>
-        </div>
       </div>
       <div class="tlight-wrap">
         <div class="tlight">
@@ -256,6 +237,27 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
           <div class="tl-dot tl-g" id="tlG"></div>
         </div>
         <div class="tl-lbl" id="tlLbl">Wait</div>
+      </div>
+    </div>
+    <!-- Bottom row: Ccx | Pct | Pde — full width -->
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:6px">
+      <div class="vbox good" id="boxCcx">
+        <div class="vlbl">CCX</div>
+        <div class="vnum good" id="numCcx">—</div>
+        <div class="vunit">m/s²</div>
+        <div class="vdesc">Longitudinal</div>
+      </div>
+      <div class="vbox good" id="boxPct">
+        <div class="vlbl">Pct</div>
+        <div class="vnum good" id="numPct">—</div>
+        <div class="vunit">%</div>
+        <div class="vdesc">Curve Transition</div>
+      </div>
+      <div class="vbox good" id="boxPde">
+        <div class="vlbl">Pde</div>
+        <div class="vnum good" id="numPde">0%</div>
+        <div class="vunit">%</div>
+        <div class="vdesc">Discrete Jolts</div>
       </div>
     </div>
   </div>
