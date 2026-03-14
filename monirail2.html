@@ -482,7 +482,7 @@ let cht={ccz:[],ccy:[],pct:[]};
 
 // CSV
 let csvRows=[];
-const CSV_HDR='timestamp_ms,perf_ms,ax_ms2,ay_ms2,az_ms2,gx_degs,gy_degs,gz_degs,Ccz_ms2,Ccy_ms2,Pct_pct,Pde_pct,speed_mph,lat,lon,num_sats,speed_accuracy_mph';
+const CSV_HDR='timestamp_ms,perf_ms,ax_ms2,ay_ms2,az_ms2,gx_degs,gy_degs,gz_degs,Ccz_ms2,Ccy_ms2,Pct,Pde,speed_mph,lat,lon,num_sats,speed_accuracy_mph';
 
 let uiTimer=null, chartTimer=null, sessTimer=null;
 
@@ -765,9 +765,16 @@ function onGPS(pos){
   lat=pos.coords.latitude; lon=pos.coords.longitude;
   alt=pos.coords.altitude!=null?pos.coords.altitude.toFixed(0):'—';
   if(pos.coords.speed!=null)gpsSpeed=pos.coords.speed*2.237;
-  gpsSpeedAcc=pos.coords.speedAccuracy!=null?pos.coords.speedAccuracy*2.237:null;
-  // Infer satellite count estimate from horizontal accuracy
+
+  // speedAccuracy is non-standard (available on some Android/Chrome builds).
+  // Try reading it safely; fall back to estimating from horizontal accuracy.
   const hacc=pos.coords.accuracy;
+  try{
+    const rawSA=pos.coords.speedAccuracy??pos.coords["speed_accuracy"];
+    gpsSpeedAcc=rawSA!=null&&rawSA!==undefined
+      ?(rawSA*2.237)                    // convert m/s → mph if device exposes it
+      :(pos.coords.speed!=null?hacc*0.02:null); // fallback estimate from hacc
+  }catch(e){gpsSpeedAcc=null;}
   gpsNumSats=hacc<=5?15:hacc<=15?10:hacc<=40?7:hacc<=100?4:null;
   document.getElementById('pilGPS').className='pill pill-on';
 
