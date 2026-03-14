@@ -230,13 +230,13 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
         <div class="vbox good" id="boxPct">
           <div class="vlbl">Pct</div>
           <div class="vnum good" id="numPct">—</div>
-          <div class="vunit">m/s² QS</div>
+          <div class="vunit">%</div>
           <div class="vdesc">Curve Transition</div>
         </div>
         <div class="vbox good" id="boxPde">
           <div class="vlbl">Pde</div>
           <div class="vnum good" id="numPde">0</div>
-          <div class="vunit">events</div>
+          <div class="vunit">%</div>
           <div class="vdesc">Discrete Jolts</div>
         </div>
       </div>
@@ -268,7 +268,7 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
       </div>
     </div>
     <div class="bottom-row">
-      <div class="mini"><div class="mlbl">Pct Peak m/s²</div><div class="mval" id="miniPctPk">—</div></div>
+      <div class="mini"><div class="mlbl">Pct Peak %</div><div class="mval" id="miniPctPk">—</div></div>
       <div class="mini"><div class="mlbl">Pde Events</div><div class="mval" style="color:var(--red)" id="miniPde">0</div></div>
       <div class="mini"><div class="mlbl">Sample Rate</div><div class="mval" style="color:var(--acc)" id="miniFsVal">— Hz</div></div>
     </div>
@@ -280,7 +280,6 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
     <div class="legend">
       <div class="leg"><div class="leg-l" style="background:var(--acc)"></div>Ccz</div>
       <div class="leg"><div class="leg-l" style="background:var(--orange)"></div>Ccy</div>
-      <div class="leg"><div class="leg-l" style="background:var(--green)"></div>Pct</div>
     </div>
     <canvas id="chartCanvas" height="140"></canvas>
   </div>
@@ -311,11 +310,11 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
   <!-- Pde Event log -->
   <div class="card">
     <div class="card-hdr">
-      <span>Pde Discrete Event Log — Peak &gt; 0.315 m/s²</span>
+      <span>Event Log — Pde &gt;10% · Ccz or Ccy &gt;0.4 m/s²</span>
       <span class="card-hdr-accent" id="evCount">0</span>
     </div>
     <div class="evlog" id="evlog">
-      <div class="evlog-empty">No events — monitoring discrete jolt peaks</div>
+      <div class="evlog-empty">No events — monitoring Pde &gt;10% and Ccz/Ccy &gt;0.4 m/s²</div>
     </div>
   </div>
 
@@ -455,14 +454,16 @@ let rmsZ=new RollingRMS(WL_S*100);
 let rmsY=new RollingRMS(WL_S*100);
 let ccz=0, ccy=0, pct=0;
 
-// Pde — EN 12299 Annex D "Discrete events"
-// A 100 ms short-window RMS on Wd-filtered lateral × √2 approximates
-// the instantaneous peak.  Event triggered when peak > 0.315 m/s²
-// (the Wd "less comfortable" boundary from comfort.m threshold L30=0.315).
-// 2 s debounce prevents re-counting the same jolt.
+// Event log triggers:
+//   Pde  > 10 %       (discrete jolt percentage)
+//   Ccz  > 0.4 m/s²   (vertical comfort threshold)
+//   Ccy  > 0.4 m/s²   (lateral comfort threshold)
+// 2 s debounce prevents double-counting the same event.
 let pdeBuf=new RollingRMS(10);
 let pdeCount=0, pdeLastT=0, pdeCurPk=0;
-const PDE_THRESH=0.315;    // m/s²
+let evalWindows=0, pde=0;  // Pde as %
+const PDE_THRESH_PCT=10;   // % — Pde threshold
+const CC_THRESH=0.4;       // m/s² — Ccz / Ccy threshold
 const PDE_DEBOUNCE=2000;   // ms
 
 // Session accumulators
@@ -481,7 +482,7 @@ let cht={ccz:[],ccy:[],pct:[]};
 
 // CSV
 let csvRows=[];
-const CSV_HDR='timestamp_ms,perf_ms,ax_ms2,ay_ms2,az_ms2,gx_degs,gy_degs,gz_degs,Ccz,Ccy,Pct,Pde_count,speed_mph,lat,lon,num_sats,speed_accuracy_mph';
+const CSV_HDR='timestamp_ms,perf_ms,ax_ms2,ay_ms2,az_ms2,gx_degs,gy_degs,gz_degs,Ccz_ms2,Ccy_ms2,Pct_pct,Pde_pct,speed_mph,lat,lon,num_sats,speed_accuracy_mph';
 
 let uiTimer=null, chartTimer=null, sessTimer=null;
 
@@ -523,7 +524,7 @@ function startMonitor(){
   monitoring=true; startTime=Date.now();
   ccz=0;ccy=0;pct=0;
   cczSum=0;ccySum=0;sN=0;cczPk=0;ccyPk=0;pctPk=0;
-  pdeCount=0;pdeLastT=0;pdeCurPk=0;
+  pdeCount=0;pdeLastT=0;pdeCurPk=0;evalWindows=0;pde=0;
   fsKnown=false;fsEst=100;
   if(fWb){fWb.reset();fWd.reset();fPctLP.reset();}
   rmsZ.reset();rmsY.reset();pdeBuf.reset();
@@ -596,13 +597,21 @@ function onMotion(e){
   pct=Math.abs(ay_qs);
   if(pct>pctPk)pctPk=pct;
 
-  // — Pde : discrete event detection (EN12299 Annex D) —
+  // — Event detection ——————————————————————————————————
+  // Trigger on: Pde > 10%, Ccz > 0.4 m/s², or Ccy > 0.4 m/s²
   pdeBuf.push(ay_wd);
   const pk=pdeBuf.get()*Math.SQRT2;  // RMS × √2 ≈ peak
   pdeCurPk=pk;
-  if(pk>PDE_THRESH&&(perf-pdeLastT)>PDE_DEBOUNCE){
-    pdeLastT=perf; pdeCount++;
-    logEvent(ax,ay,az,ay_wd,az_wb,pk);
+
+  const pdeTriggered = pde > PDE_THRESH_PCT;
+  const cczTriggered = ccz > CC_THRESH;
+  const ccyTriggered = ccy > CC_THRESH;
+
+  if((pdeTriggered||cczTriggered||ccyTriggered)&&(perf-pdeLastT)>PDE_DEBOUNCE){
+    pdeLastT=perf;
+    if(pdeTriggered) pdeCount++;
+    const trigger = pdeTriggered?'Pde':cczTriggered?'Ccz':'Ccy';
+    logEvent(ax,ay,az,ay_wd,az_wb,pk,trigger);
   }
 
   // — Accumulators —
@@ -630,15 +639,18 @@ function onMotion(e){
 // ============================================================
 // Pde EVENT LOG
 // ============================================================
-function logEvent(ax,ay,az,ay_wd,az_wb,pk){
+function logEvent(ax,ay,az,ay_wd,az_wb,pk,trigger){
   evCount++;
   const ev={
     t:new Date().toTimeString().slice(0,8),
+    trigger:trigger||'Pde',
     ccz:ccz.toFixed(4), ccy:ccy.toFixed(4),
-    pct:pct.toFixed(4), pk:pk.toFixed(4),
+    pct:pct.toFixed(2), pde:pde.toFixed(2), pk:pk.toFixed(4),
     spd:gpsSpeed.toFixed(1),
-    lat:lat!=null?lat.toFixed(5):'—',
-    lon:lon!=null?lon.toFixed(5):'—'
+    lat:lat!=null?lat.toFixed(6):null,
+    lon:lon!=null?lon.toFixed(6):null,
+    latDisp:lat!=null?lat.toFixed(5):'—',
+    lonDisp:lon!=null?lon.toFixed(5):'—'
   };
   eventList.unshift(ev);
   if(eventList.length>100)eventList.pop();
@@ -648,7 +660,7 @@ function logEvent(ax,ay,az,ay_wd,az_wb,pk){
     const col=pk>0.5?'#ff3b3b':'#ffb020';
     L.circleMarker([lat,lon],{radius:7,color:col,fillColor:col,fillOpacity:.85,weight:2})
       .addTo(leafMap)
-      .bindPopup(`<b>Pde ${pk} m/s²</b><br>Ccz:${ev.ccz} Ccy:${ev.ccy}<br>Pct:${ev.pct} m/s²<br>${ev.spd} mph &nbsp; ${ev.t}`);
+      .bindPopup(`<b>${ev.trigger} Event</b><br>Ccz:${ev.ccz} Ccy:${ev.ccy}<br>Pct:${ev.pct}% Pde:${ev.pde}%<br>${ev.spd} mph &nbsp; ${ev.t}`);
   }
 
   renderEvLog();
@@ -659,13 +671,28 @@ function logEvent(ax,ay,az,ay_wd,az_wb,pk){
 
 function renderEvLog(){
   const el=document.getElementById('evlog');
-  if(!eventList.length){el.innerHTML='<div class="evlog-empty">No events</div>';return;}
-  el.innerHTML=eventList.map(ev=>`
-    <div class="ev-item">
+  if(!eventList.length){el.innerHTML='<div class="evlog-empty">No events — monitoring Pde &gt;10% and Ccz/Ccy &gt;0.4 m/s²</div>';return;}
+  el.innerHTML=eventList.map(ev=>{
+    const mapsHref=ev.lat!=null
+      ? `https://www.google.com/maps?q=${ev.lat},${ev.lon}`
+      : null;
+    const locStr=ev.lat!=null
+      ? `<a href="${mapsHref}" target="_blank" rel="noopener"
+           style="color:var(--acc3);text-decoration:underline;cursor:pointer"
+           onclick="event.stopPropagation()">${ev.latDisp},${ev.lonDisp}</a>`
+      : '—';
+    const trigCol=ev.trigger==='Ccz'?'var(--acc)':ev.trigger==='Ccy'?'var(--orange)':'var(--red)';
+    return `
+    <div class="ev-item" style="cursor:${mapsHref?'pointer':'default'}"
+         onclick="${mapsHref?`window.open('${mapsHref}','_blank')`:''}">
       <span class="ev-t">${ev.t}</span>
-      <span class="ev-d">Ccz ${ev.ccz} | Ccy ${ev.ccy} | Pct ${ev.pct} m/s² | ${ev.spd} mph | ${ev.lat},${ev.lon}</span>
+      <span class="ev-d">
+        <span style="color:${trigCol};font-weight:700;margin-right:4px">${ev.trigger}</span>
+        Ccz ${ev.ccz} | Ccy ${ev.ccy} | Pct ${ev.pct}% | Pde ${ev.pde}% | ${ev.spd} mph | ${locStr}
+      </span>
       <span class="ev-pk">&#9650;${ev.pk}</span>
-    </div>`).join('');
+    </div>`;
+  }).join('');
 }
 
 // ============================================================
@@ -684,8 +711,8 @@ function updateUI(){
   const pctCls=pct>0.65?'bad':pct>0.30?'med':'good';
   setVBox('numPct','boxPct',pct.toFixed(4),pctCls);
 
-  const pdeCls=pdeCount>10?'bad':pdeCount>3?'med':'good';
-  setVBox('numPde','boxPde',String(pdeCount),pdeCls);
+  const pdeCls=pde>10?'bad':pde>3?'med':'good';
+  setVBox('numPde','boxPde',pde.toFixed(1)+'%',pdeCls);
 
   document.getElementById('tlR').className='tl-dot tl-r'+(tl==='r'?' on':'');
   document.getElementById('tlA').className='tl-dot tl-a'+(tl==='a'?' on':'');
@@ -713,6 +740,8 @@ function setVBox(nId,bId,val,cls){
 }
 
 function pushChart(){
+  evalWindows++;  // count 1-second windows
+  pde=evalWindows>0?(pdeCount/evalWindows*100):0;
   cht.ccz.push(ccz);cht.ccy.push(ccy);cht.pct.push(pct);
   if(cht.ccz.length>CH_N){cht.ccz.shift();cht.ccy.shift();cht.pct.shift();}
   drawChart();
@@ -848,7 +877,6 @@ function drawChart(){
   }
   line(cht.ccz,'#00d4ff',1.8);
   line(cht.ccy,'#ff6030',1.8);
-  line(cht.pct,'#00e87a',1.2);
   ctx.font='8px Courier New';ctx.fillStyle='#2a4050';
   ctx.fillText('60s',4,H-3);ctx.fillText('now',W-24,H-3);
 }
