@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>MoniRail – EN 12299 Ride Quality</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap');
+:root{
+  --bg:#06090f;--bg2:#0b1018;--bg3:#101620;--bg4:#141d2a;
+  --border:#192535;--border2:#223040;
+  --acc:#00d4ff;--acc2:#0050c8;--acc3:#00a8e8;
+  --green:#00e87a;--amber:#ffb020;--red:#ff3b3b;--orange:#ff6030;--purple:#b060ff;
+  --text:#c8daf0;--muted:#4a6880;
+  --mono:'Share Tech Mono',monospace;--head:'Barlow Condensed',sans-serif;--body:'Barlow',sans-serif;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--text);font-family:var(--body);min-height:100vh;overflow-x:hidden;-webkit-tap-highlight-color:transparent}
+body::after{content:'';position:fixed;inset:0;background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,212,255,.015) 2px,rgba(0,212,255,.015) 4px);pointer-events:none;z-index:9999}
+
+/* ── PERMISSION ── */
+#permOverlay{position:fixed;inset:0;background:radial-gradient(ellipse at 50% 40%,#0a1828,var(--bg) 70%);z-index:5000;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:30px 24px;text-align:center}
+.perm-brand{font-family:var(--head);font-size:2.6rem;font-weight:800;letter-spacing:6px;background:linear-gradient(90deg,var(--acc2),var(--acc),#60f0ff);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+.perm-tag{font-family:var(--mono);font-size:.65rem;color:var(--muted);letter-spacing:3px;margin-top:4px;margin-bottom:24px}
+.perm-title{font-family:var(--head);font-size:1.3rem;font-weight:700;color:var(--acc);letter-spacing:2px;margin-bottom:10px}
+.perm-desc{font-size:.82rem;color:var(--muted);line-height:1.65;max-width:320px;margin-bottom:28px}
+.btn-perm{background:linear-gradient(135deg,var(--acc2),var(--acc));color:#fff;border:none;border-radius:6px;padding:14px 40px;font-family:var(--head);font-size:1rem;font-weight:700;letter-spacing:3px;cursor:pointer;box-shadow:0 0 40px rgba(0,212,255,.25);transition:all .2s}
+.btn-perm:active{transform:scale(.97)}
+.perm-note{margin-top:18px;font-family:var(--mono);font-size:.6rem;color:#1e3040;letter-spacing:1.5px;line-height:1.8}
+.rail-track{width:260px;height:18px;position:relative;margin:16px auto}
+.rail-track::before,.rail-track::after{content:'';position:absolute;width:100%;border-radius:2px;background:linear-gradient(90deg,transparent,#223040,#223040,transparent)}
+.rail-track::before{top:2px;height:3px}.rail-track::after{top:13px;height:3px}
+.rail-sl{display:flex;justify-content:space-evenly;height:100%;padding:0 10px}
+.sl{width:4px;background:var(--border);border-radius:1px}
+
+/* ── HEADER ── */
+header{background:linear-gradient(180deg,#0c1422,var(--bg2));border-bottom:1px solid var(--border);padding:8px 12px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:0 2px 20px rgba(0,0,0,.6)}
+.h-logo{display:flex;align-items:center;gap:9px}
+.h-brand{display:flex;flex-direction:column}
+.h-name{font-family:var(--head);font-size:1.35rem;font-weight:800;letter-spacing:4px;background:linear-gradient(90deg,var(--acc2),var(--acc));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;line-height:1}
+.h-sub{font-family:var(--mono);font-size:.52rem;color:var(--muted);letter-spacing:2px;margin-top:1px}
+.h-pills{display:flex;gap:5px}
+.pill{padding:2px 7px;border-radius:3px;font-family:var(--mono);font-size:.58rem;font-weight:700;letter-spacing:1px;border:1px solid;transition:all .3s}
+.pill-off{border-color:#1a2535;color:#2a3545;background:transparent}
+.pill-on{border-color:var(--acc);color:var(--acc);background:rgba(0,212,255,.08);animation:pp 2s ease-in-out infinite}
+.pill-rec{border-color:var(--red);color:var(--red);background:rgba(255,59,59,.08);animation:pp .8s ease-in-out infinite}
+@keyframes pp{0%,100%{opacity:1}50%{opacity:.5}}
+
+/* ── LAYOUT ── */
+main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;margin:0 auto;padding-bottom:24px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:10px 12px;position:relative;overflow:hidden}
+.card::before{content:'';position:absolute;top:0;left:0;right:0;height:1px;background:linear-gradient(90deg,transparent,rgba(0,212,255,.2),transparent)}
+.card-hdr{font-family:var(--mono);font-size:.58rem;letter-spacing:2.5px;color:var(--muted);margin-bottom:8px;display:flex;justify-content:space-between;align-items:center}
+.card-hdr-accent{color:var(--acc)}
+
+/* ── TOP ROW ── */
+.top-row{display:grid;grid-template-columns:90px 1fr 50px;gap:8px;align-items:center}
+#speedCanvas{display:block;margin:0 auto}
+.speed-lbl{font-family:var(--mono);font-size:.52rem;color:var(--muted);letter-spacing:2px;margin-top:2px;text-align:center}
+
+/* ── VALUE BOXES ── */
+.val-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.vbox{background:var(--bg3);border:1px solid var(--border);border-radius:5px;padding:6px 8px;text-align:center;position:relative;overflow:hidden;transition:border-color .5s}
+.vbox::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;transition:background .5s}
+.vbox.good::after{background:var(--green)}.vbox.med::after{background:var(--amber)}.vbox.bad::after{background:var(--red)}
+.vbox.good{border-color:rgba(0,232,122,.2)}.vbox.med{border-color:rgba(255,176,32,.2)}.vbox.bad{border-color:rgba(255,59,59,.2)}
+.vlbl{font-family:var(--mono);font-size:.55rem;letter-spacing:2px;color:var(--muted);margin-bottom:2px}
+.vnum{font-family:var(--mono);font-size:1.28rem;font-weight:700;color:var(--acc);line-height:1;transition:color .5s}
+.vnum.good{color:var(--green)}.vnum.med{color:var(--amber)}.vnum.bad{color:var(--red)}
+.vunit{font-family:var(--mono);font-size:.44rem;color:#2a4050;margin-top:1px}
+.vdesc{font-family:var(--mono);font-size:.45rem;color:var(--muted);margin-top:1px}
+
+/* ── TRAFFIC LIGHT ── */
+.tlight-wrap{display:flex;flex-direction:column;align-items:center;gap:3px}
+.tlight{width:34px;background:#060c14;border:1px solid #1a2535;border-radius:18px;padding:5px 4px;display:flex;flex-direction:column;gap:4px;box-shadow:inset 0 0 10px rgba(0,0,0,.8)}
+.tl-dot{width:26px;height:26px;border-radius:50%;transition:all .6s}
+.tl-r{background:#1f0808}.tl-a{background:#1f1408}.tl-g{background:#081f10}
+.tl-r.on{background:var(--red);box-shadow:0 0 10px var(--red),0 0 28px rgba(255,59,59,.4)}
+.tl-a.on{background:var(--amber);box-shadow:0 0 10px var(--amber),0 0 28px rgba(255,176,32,.4)}
+.tl-g.on{background:var(--green);box-shadow:0 0 10px var(--green),0 0 28px rgba(0,232,122,.4)}
+.tl-lbl{font-family:var(--mono);font-size:.45rem;color:var(--muted);letter-spacing:1px;text-align:center;line-height:1.3}
+
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat-row{display:flex;justify-content:space-between;padding:2px 0}
+.skey{color:var(--muted);font-family:var(--mono);font-size:.6rem}
+.sval{color:var(--text);font-family:var(--mono);font-size:.67rem;font-weight:600}
+.bar-track{height:3px;background:var(--bg4);border-radius:2px;margin-top:3px;overflow:hidden}
+.bar-fill{height:100%;border-radius:2px;transition:width .8s}
+.bar-z{background:linear-gradient(90deg,var(--acc2),var(--acc))}
+.bar-y{background:linear-gradient(90deg,#8040c0,var(--orange))}
+.bottom-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-top:7px}
+.mini{background:var(--bg3);border:1px solid var(--border);border-radius:4px;padding:5px 6px;text-align:center}
+.mlbl{font-family:var(--mono);font-size:.5rem;color:var(--muted);letter-spacing:1px}
+.mval{font-family:var(--mono);font-size:.78rem;color:var(--text);font-weight:600;margin-top:2px}
+
+/* ── CHART ── */
+.legend{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:6px}
+.leg{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:.58rem;color:var(--muted)}
+.leg-l{width:14px;height:2px;border-radius:1px}
+#chartCanvas{display:block;width:100%;border-radius:4px}
+
+/* ── MAP ── */
+#map{height:210px;border-radius:6px;overflow:hidden;border:1px solid var(--border)}
+.gps-row{display:flex;justify-content:space-between;margin-top:6px;font-family:var(--mono);font-size:.6rem;color:var(--muted)}
+.gps-val{color:var(--acc3)}
+
+/* ── EVENT LOG ── */
+.evlog{max-height:160px;overflow-y:auto;font-family:var(--mono);font-size:.62rem}
+.evlog::-webkit-scrollbar{width:3px}
+.evlog::-webkit-scrollbar-track{background:var(--bg3)}
+.evlog::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+.ev-item{display:grid;grid-template-columns:60px 1fr auto;gap:6px;align-items:start;padding:5px 6px;border-bottom:1px solid var(--border)}
+.ev-item:hover{background:var(--bg3)}
+.ev-t{color:var(--acc3)}
+.ev-d{color:var(--text);font-size:.58rem;line-height:1.5}
+.ev-pk{color:var(--red);font-weight:700;white-space:nowrap}
+.evlog-empty{text-align:center;color:var(--muted);padding:20px;font-size:.7rem}
+
+/* ── CONTROLS ── */
+.ctrl-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:7px}
+.btn{padding:11px 6px;border:1px solid;border-radius:6px;font-family:var(--head);font-size:.75rem;font-weight:700;letter-spacing:2px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:5px;transition:all .15s;background:transparent}
+.btn:active{transform:scale(.96)}
+.btn-start{border-color:var(--acc);color:var(--acc)}.btn-start:hover{background:rgba(0,212,255,.06)}
+.btn-start.running{border-color:var(--red);color:var(--red)}
+.btn-rec{border-color:var(--red);color:var(--red)}.btn-rec:hover{background:rgba(255,59,59,.06)}
+.btn-rec.active{background:rgba(255,59,59,.1);animation:rp .8s ease-in-out infinite}
+@keyframes rp{0%,100%{opacity:1}50%{opacity:.6}}
+.btn-csv{border-color:var(--green);color:var(--green)}.btn-csv:hover{background:rgba(0,232,122,.06)}
+.footer{text-align:center;font-family:var(--mono);font-size:.52rem;color:#1a2535;letter-spacing:2px;padding:4px 0 10px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+
+<!-- PERMISSION OVERLAY -->
+<div id="permOverlay">
+  <svg width="140" height="100" viewBox="0 0 140 100" style="margin-bottom:20px">
+    <defs>
+      <linearGradient id="lg" x1="0%" y1="100%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0050c8"/><stop offset="100%" stop-color="#00d4ff"/>
+      </linearGradient>
+      <filter id="gw"><feGaussianBlur stdDeviation="2" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+    </defs>
+    <rect x="8"  y="66" width="124" height="4" rx="2" fill="#1a3a5a"/>
+    <rect x="8"  y="80" width="124" height="4" rx="2" fill="#1a3a5a"/>
+    <rect x="12" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="23" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="34" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="45" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="56" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="67" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="78" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="89" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="100" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <rect x="111" y="68" width="4" height="20" rx="1" fill="#0d1d2e"/>
+    <polyline points="18,60 18,12 44,42 70,12 70,60" fill="none" stroke="url(#lg)"
+      stroke-width="6" stroke-linecap="round" stroke-linejoin="round" filter="url(#gw)"/>
+    <circle cx="95" cy="28" r="5" fill="#00d4ff" opacity=".9" filter="url(#gw)">
+      <animate attributeName="r" values="5;8;5" dur="2s" repeatCount="indefinite"/>
+      <animate attributeName="opacity" values=".9;.3;.9" dur="2s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="112" cy="18" r="3.5" fill="#0050c8">
+      <animate attributeName="r" values="3.5;6;3.5" dur="2.7s" repeatCount="indefinite"/>
+    </circle>
+    <circle cx="104" cy="45" r="3" fill="#00d4ff">
+      <animate attributeName="r" values="3;5;3" dur="1.8s" repeatCount="indefinite"/>
+    </circle>
+  </svg>
+  <div class="perm-brand">MoniRail</div>
+  <div class="perm-tag">EN 12299 &nbsp;·&nbsp; RIDE QUALITY MONITOR</div>
+  <div class="rail-track"><div class="rail-sl">
+    <div class="sl"></div><div class="sl"></div><div class="sl"></div><div class="sl"></div>
+    <div class="sl"></div><div class="sl"></div><div class="sl"></div><div class="sl"></div>
+  </div></div>
+  <div class="perm-title">Sensor Access Required</div>
+  <p class="perm-desc">MoniRail needs your device motion sensors and GPS to compute EN&nbsp;12299 comfort indices using exact <strong style="color:var(--acc)">Wb · Wd</strong> bilinear-transformed filters:
+    <strong style="color:var(--acc)">Ccz · Ccy · Pct · Pde</strong></p>
+  <button class="btn-perm" onclick="requestPermissions()">&#9654;&nbsp;&nbsp;ENABLE SENSORS</button>
+  <div class="perm-note">Accelerometer &nbsp;·&nbsp; GPS &nbsp;·&nbsp; All processing on-device &nbsp;·&nbsp; No data transmitted</div>
+</div>
+
+<!-- HEADER -->
+<header>
+  <div class="h-logo">
+    <svg width="38" height="32" viewBox="0 0 38 32">
+      <defs><linearGradient id="hlg" x1="0%" y1="100%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="#0050c8"/><stop offset="100%" stop-color="#00d4ff"/>
+      </linearGradient></defs>
+      <rect x="2" y="22" width="34" height="3" rx="1.5" fill="#1a3a5a"/>
+      <rect x="2" y="15" width="34" height="3" rx="1.5" fill="#1a3a5a"/>
+      <rect x="4"  y="14" width="3" height="10" rx="1" fill="#0d1d2e"/>
+      <rect x="10" y="14" width="3" height="10" rx="1" fill="#0d1d2e"/>
+      <rect x="16" y="14" width="3" height="10" rx="1" fill="#0d1d2e"/>
+      <rect x="22" y="14" width="3" height="10" rx="1" fill="#0d1d2e"/>
+      <rect x="28" y="14" width="3" height="10" rx="1" fill="#0d1d2e"/>
+      <polyline points="2,12 2,2 12,10 19,2 19,12" fill="none" stroke="url(#hlg)"
+        stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="h-brand">
+      <div class="h-name">MoniRail</div>
+      <div class="h-sub">EN 12299 RIDE QUALITY MONITOR</div>
+    </div>
+  </div>
+  <div class="h-pills">
+    <span class="pill pill-off" id="pilIMU">IMU</span>
+    <span class="pill pill-off" id="pilGPS">GPS</span>
+    <span class="pill pill-off" id="pilREC">REC</span>
+  </div>
+</header>
+
+<main>
+  <!-- Live indices -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>LIVE INDICES &nbsp;·&nbsp; Wb / Wd WEIGHTED</span>
+      <span class="card-hdr-accent" id="fsDisplay">Fs — Hz</span>
+    </div>
+    <div class="top-row">
+      <div>
+        <canvas id="speedCanvas" width="90" height="80"></canvas>
+        <div class="speed-lbl">km/h</div>
+      </div>
+      <div class="val-grid">
+        <div class="vbox good" id="boxCcz">
+          <div class="vlbl">CCZ</div>
+          <div class="vnum good" id="numCcz">—</div>
+          <div class="vunit">m/s² RMS</div>
+          <div class="vdesc">VERTICAL · Wb</div>
+        </div>
+        <div class="vbox good" id="boxCcy">
+          <div class="vlbl">CCY</div>
+          <div class="vnum good" id="numCcy">—</div>
+          <div class="vunit">m/s² RMS</div>
+          <div class="vdesc">LATERAL · Wd</div>
+        </div>
+        <div class="vbox good" id="boxPct">
+          <div class="vlbl">Pct</div>
+          <div class="vnum good" id="numPct">—</div>
+          <div class="vunit">m/s² QS</div>
+          <div class="vdesc">CURVE TRANSIT.</div>
+        </div>
+        <div class="vbox good" id="boxPde">
+          <div class="vlbl">Pde</div>
+          <div class="vnum good" id="numPde">0</div>
+          <div class="vunit">events</div>
+          <div class="vdesc">DISCRETE JOLTS</div>
+        </div>
+      </div>
+      <div class="tlight-wrap">
+        <div class="tlight">
+          <div class="tl-dot tl-r" id="tlR"></div>
+          <div class="tl-dot tl-a" id="tlA"></div>
+          <div class="tl-dot tl-g" id="tlG"></div>
+        </div>
+        <div class="tl-lbl" id="tlLbl">WAIT</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Session stats -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>SESSION STATISTICS</span>
+      <span class="card-hdr-accent" id="sessionTime">00:00</span>
+    </div>
+    <div class="stats-grid">
+      <div>
+        <div class="stat-row"><span class="skey">CCZ mean/peak</span><span class="sval" id="statCcz">—/—</span></div>
+        <div class="bar-track"><div class="bar-fill bar-z" id="barCcz" style="width:0%"></div></div>
+      </div>
+      <div>
+        <div class="stat-row"><span class="skey">CCY mean/peak</span><span class="sval" id="statCcy">—/—</span></div>
+        <div class="bar-track"><div class="bar-fill bar-y" id="barCcy" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div class="bottom-row">
+      <div class="mini"><div class="mlbl">Pct PEAK m/s²</div><div class="mval" id="miniPctPk">—</div></div>
+      <div class="mini"><div class="mlbl">Pde EVENTS</div><div class="mval" style="color:var(--red)" id="miniPde">0</div></div>
+      <div class="mini"><div class="mlbl">SAMPLE RATE</div><div class="mval" style="color:var(--acc)" id="miniFsVal">— Hz</div></div>
+    </div>
+  </div>
+
+  <!-- Chart -->
+  <div class="card">
+    <div class="card-hdr"><span>CONTINUOUS COMFORT HISTORY — 60 s</span></div>
+    <div class="legend">
+      <div class="leg"><div class="leg-l" style="background:var(--acc)"></div>Ccz Wb</div>
+      <div class="leg"><div class="leg-l" style="background:var(--orange)"></div>Ccy Wd</div>
+      <div class="leg"><div class="leg-l" style="background:var(--green)"></div>Pct curve</div>
+    </div>
+    <canvas id="chartCanvas" height="140"></canvas>
+  </div>
+
+  <!-- GPS Map -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>GPS TRACK</span>
+      <span class="card-hdr-accent" id="gpsAcc">—</span>
+    </div>
+    <div id="map"></div>
+    <div class="gps-row">
+      <span>Lat <span class="gps-val" id="gLat">—</span></span>
+      <span>Lon <span class="gps-val" id="gLon">—</span></span>
+      <span>Alt <span class="gps-val" id="gAlt">—</span> m</span>
+    </div>
+  </div>
+
+  <!-- Pde Event log -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>Pde DISCRETE EVENT LOG — Wd peak &gt; 0.315 m/s²</span>
+      <span class="card-hdr-accent" id="evCount">0</span>
+    </div>
+    <div class="evlog" id="evlog">
+      <div class="evlog-empty">No events — monitoring Wd-filtered discrete jolt peaks</div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="ctrl-row">
+    <button class="btn btn-start" id="btnStart" onclick="toggleMonitor()">&#9654; START</button>
+    <button class="btn btn-rec"   id="btnRec"   onclick="toggleRecord()">&#9210; RECORD</button>
+    <button class="btn btn-csv"                 onclick="exportCSV()">&#8681; CSV</button>
+  </div>
+
+  <div class="footer">MoniRail v2.0&nbsp;&nbsp;·&nbsp;&nbsp;EN 12299:2009+A1&nbsp;&nbsp;·&nbsp;&nbsp;Wb · Wd Tustin bilinear&nbsp;&nbsp;·&nbsp;&nbsp;BCRRE · University of Birmingham</div>
+</main>
+
+<script>
+// ============================================================
+// BIQUAD BILINEAR TRANSFORM  (Tustin / bilinear method)
+// Replicates:  sysd = c2d(sysc, 1/fs, 'tustin')  from MATLAB.
+//
+// bA, aA : analog polynomial coefficients [s², s¹, s⁰]
+//          (missing leading terms are treated as 0)
+//
+// Substitution  s = K(z-1)/(z+1),  K = 2·fs
+// After clearing (z+1)² from denominator:
+//   B[0] = b0K² + b1K + b2      A[0] = a0K² + a1K + a2
+//   B[1] = -2b0K²     + 2b2     A[1] = -2a0K²     + 2a2
+//   B[2] = b0K² - b1K + b2      A[2] = a0K² - a1K + a2
+// Returns {b:[b0z,b1z,b2z], a:[1,a1z,a2z]} normalised.
+// ============================================================
+function biquadBilinear(bA, aA, fs) {
+  const K=2*fs, K2=K*K;
+  const b0=bA[0]||0, b1=bA[1]||0, b2=bA[2]||0;
+  const a0=aA[0]||0, a1=aA[1]||0, a2=aA[2]||0;
+  const B0=b0*K2+b1*K+b2, B1=-2*b0*K2+2*b2, B2=b0*K2-b1*K+b2;
+  const A0=a0*K2+a1*K+a2, A1=-2*a0*K2+2*a2, A2=a0*K2-a1*K+a2;
+  return {b:[B0/A0,B1/A0,B2/A0], a:[1,A1/A0,A2/A0]};
+}
+
+// Direct-Form II Transposed biquad section
+class Biquad {
+  constructor(c){this.b=c.b;this.a=c.a;this.w1=0;this.w2=0;}
+  tick(x){const y=this.b[0]*x+this.w1;this.w1=this.b[1]*x-this.a[1]*y+this.w2;this.w2=this.b[2]*x-this.a[2]*y;return isFinite(y)?y:0;}
+  reset(){this.w1=0;this.w2=0;}
+}
+
+class CascadeFilter {
+  constructor(sections){this.s=sections.map(c=>new Biquad(c));}
+  tick(x){return this.s.reduce((v,b)=>b.tick(v),x);}
+  reset(){this.s.forEach(b=>b.reset());}
+}
+
+// ============================================================
+// Wd FILTER  — lateral/longitudinal comfort  (EN 12299)
+// Exactly matches comfort.m Wd section  (no upward step).
+//
+// Analog cascade:
+//  1. HP  f1=0.4 Hz,  Q1=1/√2        [band-limiting high-pass]
+//  2. LP  f2=100 Hz,  Q1=1/√2        [band-limiting low-pass]
+//  3. AV  f3=f4=2 Hz, Q2=0.63        [accel-velocity transition]
+//       b3 = w4²·[1, w3]
+//       a3 = w3·[1, w4/Q2, w4²]
+// ============================================================
+function buildWd(fs){
+  const w1=0.4*2*Math.PI, Q1=1/Math.SQRT2;
+  const w2=100*2*Math.PI;
+  const w3=2*2*Math.PI, w4=2*2*Math.PI, Q2=0.63;
+  return new CascadeFilter([
+    biquadBilinear([1,0,0],            [1,w1/Q1,w1*w1],         fs),  // HP
+    biquadBilinear([0,0,w2*w2],        [1,w2/Q1,w2*w2],         fs),  // LP
+    biquadBilinear([0,w4*w4,w4*w4*w3], [w3,w3*w4/Q2,w3*w4*w4], fs)   // AV 2 Hz
+  ]);
+}
+
+// ============================================================
+// Wb FILTER  — vertical comfort  (EN 12299)
+// Exactly matches comfort.m Wb section (includes upward step).
+//
+// Analog cascade:
+//  1. HP   f1=0.4 Hz, Q1=1/√2
+//  2. LP   f2=100 Hz, Q1=1/√2
+//  3. AV   f3=f4=16 Hz, Q2=0.63
+//  4. Step f5=2.5 Hz, f6=4 Hz, Q3=Q4=0.8, k=0.4
+//       b5 = k·w6²·[1, w5/Q3, w5²]
+//       a5 = w5²·[1, w6/Q4, w6²]
+// ============================================================
+function buildWb(fs){
+  const w1=0.4*2*Math.PI, Q1=1/Math.SQRT2;
+  const w2=100*2*Math.PI;
+  const w3b=16*2*Math.PI, w4b=16*2*Math.PI, Q2=0.63;
+  const w5=2.5*2*Math.PI, w6=4*2*Math.PI, Q3=0.8, Q4=0.8, k=0.4;
+  return new CascadeFilter([
+    biquadBilinear([1,0,0],                         [1,w1/Q1,w1*w1],               fs),
+    biquadBilinear([0,0,w2*w2],                     [1,w2/Q1,w2*w2],               fs),
+    biquadBilinear([0,w4b*w4b,w4b*w4b*w3b],         [w3b,w3b*w4b/Q2,w3b*w4b*w4b], fs),
+    biquadBilinear([k*w6*w6, k*w6*w6*w5/Q3, k*w6*w6*w5*w5],
+                   [w5*w5,   w5*w5*w6/Q4,   w5*w5*w6*w6],                          fs)
+  ]);
+}
+
+// ============================================================
+// Pct QUASI-STATIC LP  — 2nd-order Butterworth at 0.3 Hz
+//
+// EN 12299 Annex C "Curve transition comfort":
+// Extracts the sustained (quasi-static) lateral acceleration that
+// arises from cant deficiency + centrifugal force during curve
+// entry/exit.  All ride vibration above ~0.3 Hz is rejected.
+// The absolute value of this filtered signal is reported as Pct.
+// ============================================================
+function buildPctLP(fs){
+  const wc=0.3*2*Math.PI, Q=1/Math.SQRT2;
+  return new CascadeFilter([biquadBilinear([0,0,wc*wc],[1,wc/Q,wc*wc],fs)]);
+}
+
+// ============================================================
+// ROLLING RMS  — causal ring-buffer
+// Real-time equivalent of MATLAB:
+//   [Cc,~] = envelope(accFilt, Wl*fs, 'rms')
+// Window = Wl*fs samples (Wl=5 s default in comfort.m).
+// ============================================================
+class RollingRMS {
+  constructor(N){this._r(N);}
+  _r(N){this.N=N;this.buf=new Float64Array(N);this.idx=0;this.sum=0;this.n=0;}
+  push(v){const s=v*v;this.sum-=this.buf[this.idx];this.buf[this.idx]=s;this.sum+=s;this.idx=(this.idx+1)%this.N;if(this.n<this.N)this.n++;}
+  get(){return this.n?Math.sqrt(Math.max(0,this.sum)/this.n):0;}
+  resize(N){this._r(N);}
+  reset(){this.buf.fill(0);this.idx=0;this.sum=0;this.n=0;}
+}
+
+// ============================================================
+// STATE
+// ============================================================
+const WL_S=5;           // RMS window [s] — matches Wl in comfort.m
+let monitoring=false, recording=false;
+let startTime=0, sessionSec=0;
+let fWb=null, fWd=null, fPctLP=null;
+let fsEst=100, fsKnown=false;
+let rmsZ=new RollingRMS(WL_S*100);
+let rmsY=new RollingRMS(WL_S*100);
+let ccz=0, ccy=0, pct=0;
+
+// Pde — EN 12299 Annex D "Discrete events"
+// A 100 ms short-window RMS on Wd-filtered lateral × √2 approximates
+// the instantaneous peak.  Event triggered when peak > 0.315 m/s²
+// (the Wd "less comfortable" boundary from comfort.m threshold L30=0.315).
+// 2 s debounce prevents re-counting the same jolt.
+let pdeBuf=new RollingRMS(10);
+let pdeCount=0, pdeLastT=0, pdeCurPk=0;
+const PDE_THRESH=0.315;    // m/s²
+const PDE_DEBOUNCE=2000;   // ms
+
+// Session accumulators
+let cczSum=0, ccySum=0, sN=0, cczPk=0, ccyPk=0, pctPk=0;
+
+// GPS
+let lat=null, lon=null, alt=null, gpsSpeed=0;
+let gpsTrk=[], leafMap=null, polyLine=null, posMarker=null;
+
+// Events
+let eventList=[], evCount=0;
+
+// Chart — 1 sample/s, 60 s ring
+const CH_N=60;
+let cht={ccz:[],ccy:[],pct:[]};
+
+// CSV
+let csvRows=[];
+const CSV_HDR='timestamp_ms,perf_ms,ax,ay,az,ay_wd,az_wb,Ccy_rms,Ccz_rms,Pct_qs,PdePeakProxy,pdeCount,speed_kmh,lat,lon';
+
+let uiTimer=null, chartTimer=null, sessTimer=null;
+
+// ============================================================
+// FILTER INIT
+// ============================================================
+function rebuildFilters(fs){
+  fWb=buildWb(fs); fWd=buildWd(fs); fPctLP=buildPctLP(fs);
+  rmsZ.resize(Math.max(10,Math.round(WL_S*fs)));
+  rmsY.resize(Math.max(10,Math.round(WL_S*fs)));
+  pdeBuf.resize(Math.max(5,Math.round(0.1*fs)));  // 100 ms peak window
+}
+
+// ============================================================
+// PERMISSIONS / INIT
+// ============================================================
+async function requestPermissions(){
+  if(typeof DeviceMotionEvent!=='undefined'&&typeof DeviceMotionEvent.requestPermission==='function'){
+    const r=await DeviceMotionEvent.requestPermission().catch(()=>'denied');
+    if(r!=='granted'){alert('Motion permission denied.');return;}
+  }
+  initAll();
+  document.getElementById('permOverlay').classList.add('hidden');
+}
+
+function initAll(){
+  rebuildFilters(100); initMap(); initGPS();
+  drawSpeedGauge(0); drawChart();
+  window.addEventListener('orientationchange',()=>setTimeout(drawChart,300));
+  window.addEventListener('resize',drawChart);
+}
+
+// ============================================================
+// MONITORING
+// ============================================================
+function toggleMonitor(){monitoring?stopMonitor():startMonitor();}
+
+function startMonitor(){
+  monitoring=true; startTime=Date.now();
+  ccz=0;ccy=0;pct=0;
+  cczSum=0;ccySum=0;sN=0;cczPk=0;ccyPk=0;pctPk=0;
+  pdeCount=0;pdeLastT=0;pdeCurPk=0;
+  fsKnown=false;fsEst=100;
+  if(fWb){fWb.reset();fWd.reset();fPctLP.reset();}
+  rmsZ.reset();rmsY.reset();pdeBuf.reset();
+  window.addEventListener('devicemotion',onMotion,{passive:true});
+  const b=document.getElementById('btnStart');
+  b.innerHTML='&#9209; STOP'; b.classList.add('running');
+  document.getElementById('pilIMU').className='pill pill-on';
+  uiTimer=setInterval(updateUI,200);
+  chartTimer=setInterval(pushChart,1000);
+  sessTimer=setInterval(tickSess,1000);
+}
+
+function stopMonitor(){
+  monitoring=false;
+  window.removeEventListener('devicemotion',onMotion);
+  clearInterval(uiTimer);clearInterval(chartTimer);clearInterval(sessTimer);
+  const b=document.getElementById('btnStart');
+  b.innerHTML='&#9654; START'; b.classList.remove('running');
+  document.getElementById('pilIMU').className='pill pill-off';
+}
+
+// ============================================================
+// MOTION HANDLER
+//
+// Per sample pipeline:
+//  1. fs from e.interval  →  rebuild filters on first detection
+//  2. Raw ax, ay, az  [m/s²]  (gravity-free preferred)
+//  3. az → Wb → rolling RMS (5 s) → Ccz
+//  4. ay → Wd → rolling RMS (5 s) → Ccy
+//  5. ay → Pct LP (0.3 Hz) → |output| → Pct  (quasi-static, EN12299 Annex C)
+//  6. ay_wd → 100 ms RMS × √2 → peak proxy  →  Pde detection  (EN12299 Annex D)
+// ============================================================
+function onMotion(e){
+  const perf=performance.now();
+
+  // — Sample rate detection —
+  if(!fsKnown && e.interval && e.interval>0){
+    const fs=Math.round(1000/e.interval);
+    if(fs>=10&&fs<=2000){
+      fsEst=fs; rebuildFilters(fs);
+      fWb.reset();fWd.reset();fPctLP.reset();
+      rmsZ.reset();rmsY.reset();pdeBuf.reset();
+      fsKnown=true;
+    }
+  }
+
+  // — Raw acceleration [m/s²] —
+  let ax=0,ay=0,az=0;
+  const a=e.acceleration, ag=e.accelerationIncludingGravity;
+  if(a&&a.x!=null){ax=a.x||0;ay=a.y||0;az=a.z||0;}
+  else if(ag){ax=ag.x||0;ay=ag.y||0;az=ag.z||0;}
+
+  // — Ccz : Wb-weighted vertical RMS —
+  const az_wb=fWb.tick(az);
+  rmsZ.push(az_wb);
+  ccz=rmsZ.get();
+
+  // — Ccy : Wd-weighted lateral RMS —
+  const ay_wd=fWd.tick(ay);
+  rmsY.push(ay_wd);
+  ccy=rmsY.get();
+
+  // — Pct : quasi-static lateral (curve transition, EN12299 Annex C) —
+  // 0.3 Hz LP extracts cant-deficiency + centrifugal component.
+  const ay_qs=fPctLP.tick(ay);
+  pct=Math.abs(ay_qs);
+  if(pct>pctPk)pctPk=pct;
+
+  // — Pde : discrete event detection (EN12299 Annex D) —
+  pdeBuf.push(ay_wd);
+  const pk=pdeBuf.get()*Math.SQRT2;  // RMS × √2 ≈ peak
+  pdeCurPk=pk;
+  if(pk>PDE_THRESH&&(perf-pdeLastT)>PDE_DEBOUNCE){
+    pdeLastT=perf; pdeCount++;
+    logEvent(ax,ay,az,ay_wd,az_wb,pk);
+  }
+
+  // — Accumulators —
+  sN++; cczSum+=ccz; ccySum+=ccy;
+  if(ccz>cczPk)cczPk=ccz;
+  if(ccy>ccyPk)ccyPk=ccy;
+
+  // — CSV —
+  if(recording){
+    csvRows.push([
+      Date.now(),perf.toFixed(1),
+      ax.toFixed(5),ay.toFixed(5),az.toFixed(5),
+      ay_wd.toFixed(6),az_wb.toFixed(6),
+      ccy.toFixed(6),ccz.toFixed(6),
+      pct.toFixed(6),pk.toFixed(6),
+      pdeCount,gpsSpeed.toFixed(1),
+      lat!=null?lat.toFixed(6):'',
+      lon!=null?lon.toFixed(6):''
+    ].join(','));
+  }
+}
+
+// ============================================================
+// Pde EVENT LOG
+// ============================================================
+function logEvent(ax,ay,az,ay_wd,az_wb,pk){
+  evCount++;
+  const ev={
+    t:new Date().toTimeString().slice(0,8),
+    ccz:ccz.toFixed(4), ccy:ccy.toFixed(4),
+    pct:pct.toFixed(4), pk:pk.toFixed(4),
+    spd:gpsSpeed.toFixed(1),
+    lat:lat!=null?lat.toFixed(5):'—',
+    lon:lon!=null?lon.toFixed(5):'—'
+  };
+  eventList.unshift(ev);
+  if(eventList.length>100)eventList.pop();
+
+  // Map marker
+  if(lat!=null&&lon!=null&&leafMap){
+    const col=pk>0.5?'#ff3b3b':'#ffb020';
+    L.circleMarker([lat,lon],{radius:7,color:col,fillColor:col,fillOpacity:.85,weight:2})
+      .addTo(leafMap)
+      .bindPopup(`<b>Pde ${pk} m/s²</b><br>Ccz:${ev.ccz} Ccy:${ev.ccy}<br>Pct:${ev.pct} m/s²<br>${ev.spd} km/h &nbsp; ${ev.t}`);
+  }
+
+  renderEvLog();
+  document.getElementById('evCount').textContent=evCount;
+  document.getElementById('miniPde').textContent=pdeCount;
+  document.getElementById('numPde').textContent=pdeCount;
+}
+
+function renderEvLog(){
+  const el=document.getElementById('evlog');
+  if(!eventList.length){el.innerHTML='<div class="evlog-empty">No events</div>';return;}
+  el.innerHTML=eventList.map(ev=>`
+    <div class="ev-item">
+      <span class="ev-t">${ev.t}</span>
+      <span class="ev-d">Ccz ${ev.ccz} | Ccy ${ev.ccy} | Pct ${ev.pct} m/s² | ${ev.spd} km/h | ${ev.lat},${ev.lon}</span>
+      <span class="ev-pk">&#9650;${ev.pk}</span>
+    </div>`).join('');
+}
+
+// ============================================================
+// UI UPDATE  (200 ms)
+// EN 12299 / comfort.m thresholds:  L20=0.200  L30=0.315  L40=0.400
+// ============================================================
+function updateUI(){
+  const maxCC=Math.max(ccz,ccy);
+  let cls='good', tl='g', lbl='COMFORT';
+  if(maxCC>=0.315){cls='bad';tl='r';lbl='UNCOMF.';}
+  else if(maxCC>=0.200){cls='med';tl='a';lbl='MEDIUM';}
+
+  setVBox('numCcz','boxCcz',ccz.toFixed(4),cls);
+  setVBox('numCcy','boxCcy',ccy.toFixed(4),cls);
+
+  const pctCls=pct>0.65?'bad':pct>0.30?'med':'good';
+  setVBox('numPct','boxPct',pct.toFixed(4),pctCls);
+
+  const pdeCls=pdeCount>10?'bad':pdeCount>3?'med':'good';
+  setVBox('numPde','boxPde',String(pdeCount),pdeCls);
+
+  document.getElementById('tlR').className='tl-dot tl-r'+(tl==='r'?' on':'');
+  document.getElementById('tlA').className='tl-dot tl-a'+(tl==='a'?' on':'');
+  document.getElementById('tlG').className='tl-dot tl-g'+(tl==='g'?' on':'');
+  document.getElementById('tlLbl').textContent=lbl;
+
+  const mz=sN?(cczSum/sN).toFixed(4):'—';
+  const my=sN?(ccySum/sN).toFixed(4):'—';
+  document.getElementById('statCcz').textContent=mz+'/'+cczPk.toFixed(4);
+  document.getElementById('statCcy').textContent=my+'/'+ccyPk.toFixed(4);
+  document.getElementById('barCcz').style.width=Math.min(100,ccz/0.4*100)+'%';
+  document.getElementById('barCcy').style.width=Math.min(100,ccy/0.4*100)+'%';
+  document.getElementById('miniPctPk').textContent=pctPk.toFixed(4);
+  document.getElementById('miniPde').textContent=pdeCount;
+  document.getElementById('miniFsVal').textContent=Math.round(fsEst)+' Hz';
+  document.getElementById('fsDisplay').textContent='Fs '+Math.round(fsEst)+' Hz';
+
+  drawSpeedGauge(gpsSpeed);
+}
+
+function setVBox(nId,bId,val,cls){
+  document.getElementById(nId).textContent=val;
+  document.getElementById(nId).className='vnum '+cls;
+  document.getElementById(bId).className='vbox '+cls;
+}
+
+function pushChart(){
+  cht.ccz.push(ccz);cht.ccy.push(ccy);cht.pct.push(pct);
+  if(cht.ccz.length>CH_N){cht.ccz.shift();cht.ccy.shift();cht.pct.shift();}
+  drawChart();
+}
+
+function tickSess(){
+  sessionSec=Math.floor((Date.now()-startTime)/1000);
+  const m=String(Math.floor(sessionSec/60)).padStart(2,'0');
+  const s=String(sessionSec%60).padStart(2,'0');
+  document.getElementById('sessionTime').textContent=m+':'+s;
+}
+
+// ============================================================
+// GPS
+// ============================================================
+function initGPS(){
+  if(!navigator.geolocation)return;
+  navigator.geolocation.watchPosition(onGPS,null,{enableHighAccuracy:true,maximumAge:1000,timeout:10000});
+}
+function onGPS(pos){
+  lat=pos.coords.latitude; lon=pos.coords.longitude;
+  alt=pos.coords.altitude!=null?pos.coords.altitude.toFixed(0):'—';
+  if(pos.coords.speed!=null)gpsSpeed=pos.coords.speed*3.6;
+  document.getElementById('pilGPS').className='pill pill-on';
+  document.getElementById('gLat').textContent=lat.toFixed(5);
+  document.getElementById('gLon').textContent=lon.toFixed(5);
+  document.getElementById('gAlt').textContent=alt;
+  document.getElementById('gpsAcc').textContent='±'+Math.round(pos.coords.accuracy)+'m';
+  if(leafMap){
+    const ll=[lat,lon]; gpsTrk.push(ll);
+    polyLine.setLatLngs(gpsTrk); posMarker.setLatLng(ll);
+    if(gpsTrk.length===1||gpsTrk.length%20===0)leafMap.panTo(ll);
+  }
+}
+
+// ============================================================
+// MAP
+// ============================================================
+function initMap(){
+  leafMap=L.map('map',{zoomControl:false,attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{maxZoom:19}).addTo(leafMap);
+  L.control.zoom({position:'bottomright'}).addTo(leafMap);
+  polyLine=L.polyline([],{color:'#00d4ff',weight:2.5,opacity:.8}).addTo(leafMap);
+  posMarker=L.circleMarker([51.5,-0.1],{radius:8,color:'#00d4ff',fillColor:'#00d4ff',fillOpacity:1,weight:2}).addTo(leafMap);
+  leafMap.setView([51.5,-0.1],14);
+  navigator.geolocation&&navigator.geolocation.getCurrentPosition(p=>{
+    leafMap.setView([p.coords.latitude,p.coords.longitude],16);
+    posMarker.setLatLng([p.coords.latitude,p.coords.longitude]);
+  },null,{timeout:5000});
+}
+
+// ============================================================
+// SPEED GAUGE
+// ============================================================
+function drawSpeedGauge(spd){
+  const c=document.getElementById('speedCanvas');
+  const ctx=c.getContext('2d');
+  const W=c.width,H=c.height,cx=W/2,cy=H*0.56,R=32;
+  ctx.clearRect(0,0,W,H);
+  const sa=Math.PI*.8,ea=Math.PI*2.2,sp=ea-sa;
+  ctx.beginPath();ctx.arc(cx,cy,R,sa,ea);ctx.strokeStyle='#131e2c';ctx.lineWidth=6;ctx.lineCap='round';ctx.stroke();
+  [[0,.33,'#00e87a'],[.33,.66,'#ffb020'],[.66,1,'#ff3b3b']].forEach(([f,t,col])=>{
+    ctx.beginPath();ctx.arc(cx,cy,R,sa+f*sp,sa+t*sp);
+    ctx.strokeStyle=col;ctx.lineWidth=4;ctx.globalAlpha=.35;ctx.stroke();ctx.globalAlpha=1;
+  });
+  const prog=Math.min(1,spd/200);
+  const g=ctx.createLinearGradient(cx-R,cy,cx+R,cy);
+  g.addColorStop(0,'#0050c8');g.addColorStop(1,'#00d4ff');
+  ctx.beginPath();ctx.arc(cx,cy,R,sa,sa+prog*sp);
+  ctx.strokeStyle=g;ctx.lineWidth=5;ctx.lineCap='round';ctx.stroke();
+  ctx.save();ctx.translate(cx,cy);ctx.rotate(sa+prog*sp);
+  ctx.beginPath();ctx.moveTo(-4,0);ctx.lineTo(R-6,0);
+  ctx.strokeStyle='#fff';ctx.lineWidth=1.5;ctx.lineCap='round';ctx.stroke();
+  ctx.restore();
+  ctx.beginPath();ctx.arc(cx,cy,4,0,2*Math.PI);ctx.fillStyle='#00d4ff';ctx.fill();
+  ctx.textAlign='center';
+  ctx.font='700 '+(spd>=100?'12':'14')+'px "Share Tech Mono"';
+  ctx.fillStyle='#c8daf0';ctx.fillText(Math.round(spd),cx,cy-R-8);
+}
+
+// ============================================================
+// CHART
+// Y-axis 0–0.5 m/s²  matching comfort.m plot range.
+// Threshold lines: L20=0.200 (green) L30=0.315 (amber) L40=0.400 (red)
+// ============================================================
+function drawChart(){
+  const c=document.getElementById('chartCanvas');
+  if(!c)return;
+  c.width=c.parentElement.clientWidth-24;
+  const W=c.width,H=c.height,maxY=0.5;
+  const ctx=c.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle='#0b1018';ctx.fillRect(0,0,W,H);
+
+  // Threshold lines (L20, L30, L40 from comfort.m)
+  [[0.200,'#00e87a'],[0.315,'#ffb020'],[0.400,'#ff3b3b']].forEach(([v,col])=>{
+    const y=H-(v/maxY)*H;
+    ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);
+    ctx.strokeStyle=col;ctx.lineWidth=.5;ctx.setLineDash([4,6]);
+    ctx.globalAlpha=.45;ctx.stroke();ctx.globalAlpha=1;
+    ctx.font='9px "Share Tech Mono"';ctx.fillStyle=col;
+    ctx.globalAlpha=.7;ctx.fillText(v.toFixed(3),3,y-2);ctx.globalAlpha=1;
+  });
+  ctx.setLineDash([]);
+
+  if(cht.ccz.length<2)return;
+  const n=cht.ccz.length,step=W/(CH_N-1);
+
+  function line(data,color,lw){
+    ctx.beginPath();
+    data.forEach((v,i)=>{
+      const x=W-(n-1-i)*step, y=H-Math.min(1,v/maxY)*H;
+      i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=color;ctx.lineWidth=lw||1.5;
+    ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.shadowBlur=5;ctx.shadowColor=color;ctx.stroke();ctx.shadowBlur=0;
+  }
+  line(cht.ccz,'#00d4ff',1.8);
+  line(cht.ccy,'#ff6030',1.8);
+  line(cht.pct,'#00e87a',1.2);
+  ctx.font='8px "Share Tech Mono"';ctx.fillStyle='#2a4050';
+  ctx.fillText('60s',4,H-3);ctx.fillText('now',W-24,H-3);
+}
+
+// ============================================================
+// RECORDING / CSV
+// ============================================================
+function toggleRecord(){
+  recording=!recording;
+  const btn=document.getElementById('btnRec'), pill=document.getElementById('pilREC');
+  if(recording){csvRows=[CSV_HDR];btn.classList.add('active');btn.innerHTML='&#9209; STOP REC';pill.className='pill pill-rec';}
+  else{btn.classList.remove('active');btn.innerHTML='&#9210; RECORD';pill.className='pill pill-off';}
+}
+function exportCSV(){
+  if(csvRows.length<2){alert('No data recorded.\nPress RECORD then START to capture data.');return;}
+  const blob=new Blob([csvRows.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='monirail_'+new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)+'.csv';
+  document.body.appendChild(a);a.click();document.body.removeChild(a);
+}
+
+// ============================================================
+// AUTO-INIT  (Android / desktop — no iOS 13 permission API needed)
+// ============================================================
+window.addEventListener('load',()=>{
+  if(typeof DeviceMotionEvent==='undefined'||typeof DeviceMotionEvent.requestPermission!=='function'){
+    initAll();
+    document.getElementById('permOverlay').classList.add('hidden');
+  }
+});
+</script>
+</body>
+</html>
