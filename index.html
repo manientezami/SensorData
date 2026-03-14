@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="theme-color" content="#0d1418">
+  <title>MoniRail Web Rider</title>
+
+  <!-- Styles -->
+  <link rel="stylesheet" href="css/style.css">
+
+  <!-- Leaflet CSS (CDN) -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+        integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+
+  <!--
+    CAPACITOR WRAPPER NOTE
+    ════════════════════════════════════════════════════════════════════════
+    If iPhone browser restrictions prevent reliable DeviceMotion access:
+
+    1. Install Capacitor:
+         npm install @capacitor/core @capacitor/cli
+         npx cap init "MoniRail Web Rider" "com.monirail.webrider"
+         npm install @capacitor/ios
+
+    2. In sensors.js, replace _startMotion() and _startGPS() with calls to
+       the Motion and Geolocation Capacitor plugins:
+         import { Motion } from '@capacitor/motion';
+         import { Geolocation } from '@capacitor/geolocation';
+       The callback interface (_emit('motion', sample)) remains unchanged.
+
+    3. For CSV export, replace _downloadBlob() in export.js with:
+         import { Filesystem, Directory } from '@capacitor/filesystem';
+         await Filesystem.writeFile({ path, data, directory: Directory.Documents });
+
+    4. Build:
+         npx cap add ios
+         npx cap copy
+         npx cap open ios  (requires Xcode)
+    ════════════════════════════════════════════════════════════════════════
+  -->
+</head>
+
+<body>
+<div id="app">
+
+  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <header id="header">
+    <div class="logo-mark">
+      <div class="logo-icon"></div>
+      <span class="logo-text">MoniRail</span>
+    </div>
+    <span class="header-title">Web&nbsp;Rider</span>
+    <span id="elapsedTime">--:--</span>
+  </header>
+
+  <!-- ── Sensor availability + Quality ─────────────────────────────────── -->
+  <div class="card" style="margin-top:8px">
+    <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px">
+      <span id="sensorAvailBadge">Probing sensors…</span>
+      <span id="qualityBadge" class="quality-badge q-good">GOOD</span>
+    </div>
+  </div>
+
+  <!-- ── Control row ───────────────────────────────────────────────────── -->
+  <div id="controlRow">
+    <button id="startBtn"  class="btn btn-start">▶ Start</button>
+    <button id="stopBtn"   class="btn btn-stop"  disabled>■ Stop</button>
+    <button id="exportBtn" class="btn btn-export">↓ CSV</button>
+  </div>
+
+  <!-- ── Calibration ───────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Phone Mounting &amp; Calibration</h3>
+      <span id="calStatus" class="cal-warn">Not calibrated</span>
+    </div>
+    <div class="card-body">
+      <div class="cal-row">
+        <select id="mountingSelect">
+          <option value="PORTRAIT_FACE_FORWARD">Portrait — screen faces forward</option>
+          <option value="PORTRAIT_FACE_UP">Portrait — screen faces up (flat)</option>
+          <option value="LANDSCAPE_FACE_FORWARD">Landscape — screen faces forward</option>
+          <option value="CUSTOM">Custom — capture calibration</option>
+        </select>
+        <button id="calBtn" class="btn btn-export" style="padding:8px 12px;font-size:11px">Apply</button>
+      </div>
+      <div id="calProgress" style="font-size:10px;color:var(--text-sec);margin-top:4px;font-family:var(--font-data)"></div>
+    </div>
+  </div>
+
+  <!-- ── Speed + Traffic light + GNSS ─────────────────────────────────── -->
+  <div id="statusRow">
+    <!-- Speed gauge -->
+    <div class="speed-panel">
+      <div class="speed-value" id="speedVal">--</div>
+      <div class="speed-unit">mph</div>
+      <div class="gnss-row" id="gnssStatus">No GNSS</div>
+    </div>
+
+    <!-- Traffic light -->
+    <div class="traffic-light tl-green" id="trafficLight">GREEN</div>
+
+    <!-- GNSS detail -->
+    <div class="gnss-panel">
+      <div class="data-row">
+        <span class="data-label">Sats</span>
+        <span class="data-value" id="satCount">—</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">Ccy</span>
+        <span class="data-value" id="valCcy">--</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">Ccz</span>
+        <span class="data-value" id="valCcz">--</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">PCT</span>
+        <span class="data-value" id="valPct">--</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">PDE</span>
+        <span class="data-value" id="valPde">--</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Displacement panel ─────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header"><h3>Displacement Estimate</h3></div>
+    <div class="card-body">
+      <div class="data-row">
+        <span class="data-label">Lateral</span>
+        <span class="data-value" id="valLatDisp">-- mm</span>
+      </div>
+      <div class="data-row">
+        <span class="data-label">Vertical</span>
+        <span class="data-value" id="valVertDisp">-- mm</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Motion chart ───────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Vertical &amp; Lateral Motion</h3>
+      <span id="sampleCount" style="font-family:var(--font-data);font-size:10px;color:var(--text-sec)">0 samples</span>
+    </div>
+    <div class="card-body" style="padding:8px">
+      <div id="motionChartWrap">
+        <canvas id="motionChart"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Map ────────────────────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header"><h3>Route Map</h3></div>
+    <div id="map"></div>
+  </div>
+
+  <!-- ── Validation panel ──────────────────────────────────────────────── -->
+  <div class="card">
+    <div class="card-header">
+      <h3>Sensor Validation</h3>
+      <span id="sampHealthFlag" class="health-flag hf-ok">OK</span>
+    </div>
+    <div class="card-body">
+      <div class="val-grid">
+        <div class="data-row"><span class="data-label">Req. Rate</span><span class="data-value" id="reqHz">—</span></div>
+        <div class="data-row"><span class="data-label">Deliv. Rate</span><span class="data-value" id="delivHz">—</span></div>
+        <div class="data-row"><span class="data-label">Min Interval</span><span class="data-value" id="minInt">—</span></div>
+        <div class="data-row"><span class="data-label">Max Interval</span><span class="data-value" id="maxInt">—</span></div>
+        <div class="data-row"><span class="data-label">Jitter</span><span class="data-value" id="jitter">—</span></div>
+        <div class="data-row"><span class="data-label">Drops</span><span class="data-value" id="drops">0</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Event log table ────────────────────────────────────────────────── -->
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header"><h3>Event Log</h3></div>
+    <div id="eventTableWrap">
+      <table id="eventTable">
+        <thead>
+          <tr>
+            <th>Location</th>
+            <th>Time (UTC)</th>
+            <th>Event Type</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody id="eventTableBody">
+          <tr><td colspan="4" style="color:var(--text-sec);text-align:center;padding:16px">No events yet</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<!-- Journey summary overlay (shown on stop) -->
+<div id="summaryOverlay"></div>
+
+<!-- Toast -->
+<div id="toast" class="toast"></div>
+
+<!-- ── External libraries ──────────────────────────────────────────────── -->
+<!-- Leaflet JS -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLs=" crossorigin=""></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+
+<!-- ── App modules (load order matters) ────────────────────────────────── -->
+<script src="js/config.js"></script>
+<script src="js/sensors.js"></script>
+<script src="js/calibration.js"></script>
+<script src="js/processing.js"></script>
+<script src="js/events.js"></script>
+<script src="js/map.js"></script>
+<script src="js/export.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>

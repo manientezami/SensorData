@@ -1,0 +1,476 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   MoniRail Web Rider — Engineering Dashboard Stylesheet
+   Aesthetic: industrial-technical, high contrast, field-ready
+   Font stack: JetBrains Mono (numbers/data) + Barlow Condensed (labels)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+/* ── CSS Variables ─────────────────────────────────────────────────────────── */
+:root {
+  --bg-base:       #0d1418;
+  --bg-panel:      #111c22;
+  --bg-card:       #162028;
+  --bg-card-hi:    #1a2830;
+  --border:        #1e3040;
+  --border-hi:     #2a4558;
+
+  --text-primary:  #cfd8dc;
+  --text-sec:      #78909c;
+  --text-label:    #546e7a;
+  --text-value:    #eceff1;
+
+  --accent-blue:   #00bcd4;
+  --accent-amber:  #ff9800;
+  --accent-red:    #f44336;
+  --accent-green:  #4caf50;
+
+  --tl-green:      #1b5e20;
+  --tl-green-text: #4caf50;
+  --tl-amber:      #e65100;
+  --tl-amber-text: #ff9800;
+  --tl-red:        #b71c1c;
+  --tl-red-text:   #ef5350;
+
+  --font-data:     'JetBrains Mono', monospace;
+  --font-ui:       'Barlow Condensed', sans-serif;
+
+  --radius-sm:     4px;
+  --radius:        6px;
+  --radius-lg:     10px;
+
+  --chart-h:       160px;
+  --map-h:         240px;
+}
+
+/* ── Reset / Base ──────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--bg-base); }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+/* ── App wrapper ────────────────────────────────────────────────────────────── */
+#app {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+/* ── Header ────────────────────────────────────────────────────────────────── */
+#header {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky; top: 0; z-index: 100;
+}
+
+.logo-mark {
+  display: flex; align-items: center; gap: 8px;
+}
+.logo-mark .logo-icon {
+  width: 28px; height: 28px;
+  background: var(--accent-blue);
+  clip-path: polygon(50% 0%, 100% 25%, 100% 75%, 50% 100%, 0% 75%, 0% 25%);
+}
+.logo-mark .logo-text {
+  font-family: var(--font-data);
+  font-size: 13px; font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--accent-blue);
+  text-transform: uppercase;
+}
+
+.header-title {
+  font-family: var(--font-data);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--text-sec);
+  text-transform: uppercase;
+}
+
+#elapsedTime {
+  font-family: var(--font-data);
+  font-size: 13px; font-weight: 600;
+  color: var(--accent-blue);
+  min-width: 46px; text-align: right;
+}
+
+/* ── Cards / Panels ─────────────────────────────────────────────────────────── */
+.card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin: 8px 10px 0;
+  overflow: hidden;
+}
+.card:last-child { margin-bottom: 10px; }
+
+.card-header {
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  padding: 6px 12px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.card-header h3 {
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-sec);
+}
+
+.card-body { padding: 10px 12px; }
+
+/* ── Control row ─────────────────────────────────────────────────────────────── */
+#controlRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  padding: 10px 10px 0;
+}
+
+.btn {
+  font-family: var(--font-ui);
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 14px 8px;
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  user-select: none;
+}
+.btn:active  { transform: scale(0.97); }
+.btn:disabled { opacity: 0.35; cursor: default; }
+
+.btn-start {
+  border-color: var(--accent-green);
+  color: var(--accent-green);
+}
+.btn-start:not(:disabled):hover,
+.btn-start.active { background: var(--accent-green); color: #000; }
+
+.btn-stop {
+  border-color: var(--accent-red);
+  color: var(--accent-red);
+}
+.btn-stop:not(:disabled):hover { background: var(--accent-red); color: #fff; }
+
+.btn-export {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+}
+.btn-export:not(:disabled):hover { background: var(--accent-blue); color: #000; }
+
+.btn-primary { background: var(--accent-blue); color: #000; border-color: var(--accent-blue); }
+
+/* ── Status row: speed + GNSS + traffic light ─────────────────────────────── */
+#statusRow {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 8px;
+  padding: 10px 10px 0;
+  align-items: stretch;
+}
+
+.speed-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px;
+  text-align: center;
+}
+.speed-value {
+  font-family: var(--font-data);
+  font-size: 42px; font-weight: 600;
+  line-height: 1;
+  color: var(--text-value);
+}
+.speed-unit {
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.12em;
+  color: var(--text-sec);
+  text-transform: uppercase;
+  margin-top: 2px;
+}
+.gnss-row {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-sec);
+  margin-top: 4px;
+}
+
+/* Traffic light */
+.traffic-light {
+  width: 64px;
+  border-radius: var(--radius);
+  display: flex;
+  align-items: center; justify-content: center;
+  font-family: var(--font-ui);
+  font-size: 10px; font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 0;
+  transition: background 0.3s, color 0.3s;
+  border: 1px solid var(--border);
+}
+.tl-green  { background: var(--tl-green);  color: var(--tl-green-text);  border-color: var(--tl-green-text); }
+.tl-amber  { background: var(--tl-amber);  color: var(--tl-amber-text);  border-color: var(--tl-amber-text); }
+.tl-red    { background: var(--tl-red);    color: var(--tl-red-text);    border-color: var(--tl-red-text);   }
+
+/* GNSS panel */
+.gnss-panel {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 8px 10px;
+}
+.gnss-panel .data-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  margin-bottom: 3px;
+}
+.gnss-panel .data-row:last-child { margin-bottom: 0; }
+
+/* ── Data label / value pairs ─────────────────────────────────────────────── */
+.data-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--bg-base);
+}
+.data-row:last-child { border-bottom: none; }
+.data-label {
+  font-family: var(--font-ui);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-label);
+  text-transform: uppercase;
+}
+.data-value {
+  font-family: var(--font-data);
+  font-size: 12px; font-weight: 600;
+  color: var(--text-value);
+}
+
+/* ── Chart ──────────────────────────────────────────────────────────────────── */
+#motionChartWrap {
+  height: var(--chart-h);
+  position: relative;
+}
+#motionChart { width: 100%; height: 100%; }
+
+/* ── Map ────────────────────────────────────────────────────────────────────── */
+#map {
+  height: var(--map-h);
+  width: 100%;
+  background: var(--bg-base);
+  border-radius: 0 0 var(--radius) var(--radius);
+}
+
+/* Leaflet popup override */
+.map-popup { font-family: var(--font-ui); font-size: 12px; }
+.popup-time { color: var(--text-sec); font-size: 11px; }
+.popup-sev  { font-weight: 700; }
+.popup-sev-info     { color: var(--accent-green); }
+.popup-sev-warning  { color: var(--accent-amber); }
+.popup-sev-critical { color: var(--accent-red); }
+
+/* ── Event table ─────────────────────────────────────────────────────────────── */
+#eventTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--font-ui);
+  font-size: 11px;
+}
+#eventTable thead th {
+  background: var(--bg-panel);
+  color: var(--text-sec);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 6px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; z-index: 1;
+}
+#eventTable tbody tr {
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background 0.12s;
+}
+#eventTable tbody tr:hover { background: var(--bg-card-hi); }
+#eventTable td { padding: 5px 8px; color: var(--text-primary); }
+
+.evt-warning  td:first-child { border-left: 2px solid var(--accent-amber); }
+.evt-critical td:first-child { border-left: 2px solid var(--accent-red);   }
+.evt-info     td:first-child { border-left: 2px solid var(--accent-green);  }
+
+.sev-badge {
+  font-family: var(--font-data);
+  font-size: 10px; font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.sev-warning  { background: rgba(255,152,0,0.15); color: var(--accent-amber); }
+.sev-critical { background: rgba(244,67,54,0.15); color: var(--accent-red); }
+.sev-info     { background: rgba(76,175,80,0.15); color: var(--accent-green); }
+
+/* Event table scrollable container */
+#eventTableWrap {
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* ── Quality badge ──────────────────────────────────────────────────────────── */
+.quality-badge {
+  font-family: var(--font-data);
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.1em;
+  padding: 2px 8px;
+  border-radius: 3px;
+  text-transform: uppercase;
+}
+.q-good { background: rgba(76,175,80,0.15); color: var(--accent-green); }
+.q-warn { background: rgba(255,152,0,0.15); color: var(--accent-amber); }
+
+/* ── Validation panel ─────────────────────────────────────────────────────── */
+.val-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 16px;
+}
+
+.health-flag {
+  font-family: var(--font-data);
+  font-size: 11px; font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 3px;
+}
+.hf-ok   { background: rgba(76,175,80,0.15); color: var(--accent-green); }
+.hf-warn { background: rgba(244,67,54,0.15); color: var(--accent-red);   }
+
+/* ── Sensor availability ─────────────────────────────────────────────────── */
+#sensorAvailBadge {
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: var(--text-sec);
+  letter-spacing: 0.06em;
+}
+
+/* ── Calibration ────────────────────────────────────────────────────────── */
+.cal-row {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+select {
+  background: var(--bg-base);
+  border: 1px solid var(--border-hi);
+  color: var(--text-primary);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  padding: 5px 8px;
+  flex: 1; min-width: 0;
+}
+.cal-ok   { color: var(--accent-green); font-size: 11px; font-family: var(--font-data); }
+.cal-warn { color: var(--accent-amber); font-size: 11px; font-family: var(--font-data); }
+
+/* ── Toast notification ─────────────────────────────────────────────────── */
+.toast {
+  position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+  background: var(--bg-card-hi);
+  border: 1px solid var(--border-hi);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 10px 20px;
+  border-radius: var(--radius);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s;
+  z-index: 9999;
+  max-width: 90vw;
+  text-align: center;
+}
+.toast.show { opacity: 1; }
+
+/* ── Summary overlay ────────────────────────────────────────────────────── */
+#summaryOverlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.85);
+  z-index: 500;
+  align-items: center; justify-content: center;
+  padding: 16px;
+}
+.summary-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-hi);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  width: 100%; max-width: 440px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+.summary-card h2 {
+  font-family: var(--font-ui);
+  font-size: 16px; font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent-blue);
+  margin-bottom: 14px;
+}
+.sum-grid {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px 16px;
+  margin-bottom: 16px;
+}
+.sum-grid span {
+  font-size: 12px; color: var(--text-sec);
+  font-family: var(--font-ui);
+  letter-spacing: 0.05em;
+}
+.sum-grid strong {
+  font-family: var(--font-data);
+  font-size: 12px; font-weight: 600;
+  color: var(--text-value);
+  text-align: right;
+}
+.sum-btns {
+  display: flex; gap: 8px; margin-top: 4px;
+}
+.sum-btns .btn { flex: 1; padding: 10px; }
+
+/* ── Responsive tweaks ──────────────────────────────────────────────────── */
+@media (max-width: 360px) {
+  .speed-value { font-size: 34px; }
+  #controlRow  { grid-template-columns: 1fr 1fr 1fr; gap: 6px; }
+  :root { --chart-h: 130px; --map-h: 200px; }
+}
+
+@media (min-width: 600px) {
+  #app { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+  :root { --chart-h: 200px; --map-h: 300px; }
+}
