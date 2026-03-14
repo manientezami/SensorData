@@ -460,6 +460,7 @@ function computePde(_xwHVZS, _NtiDWvpvq, _TEBANhH, _oRI_JqaEC, _TNQjUMdmk){
 // ============================================================
 const WL_S=5;           // RMS window [s] — matches Wl in comfort.m
 let monitoring=false, recording=false;
+let _wakeLock=null;
 let startTime=0, sessionSec=0;
 let fWb=null, fWd=null, fWp=null;
 let fsEst=100, fsKnown=false;
@@ -541,6 +542,15 @@ function toggleMonitor(){monitoring?stopMonitor():startMonitor();}
 
 function startMonitor(){
   monitoring=true; startTime=Date.now();
+  // Request Wake Lock so screen stays on during monitoring
+  if('wakeLock' in navigator){
+    navigator.wakeLock.request('screen')
+      .then(wl=>{
+        _wakeLock=wl;
+        _wakeLock.addEventListener('release',()=>{ _wakeLock=null; });
+      })
+      .catch(()=>{});
+  }
   ccz=0;ccy=0;ccx=0;pct=0;pde=0;
   cczSum=0;ccySum=0;ccxSum=0;sN=0;cczPk=0;ccyPk=0;ccxPk=0;pctPk=0;
   pdeCount=0;pdeLastT=0;evalWindows=0;
@@ -562,6 +572,8 @@ function startMonitor(){
 
 function stopMonitor(){
   monitoring=false;
+  // Release Wake Lock so screen can sleep normally again
+  if(_wakeLock){ _wakeLock.release().catch(()=>{}); _wakeLock=null; }
   window.removeEventListener('devicemotion',onMotion);
   clearInterval(uiTimer);clearInterval(chartTimer);clearInterval(sessTimer);
   const b=document.getElementById('btnStart');
@@ -947,6 +959,15 @@ window.addEventListener('load',()=>{
   if(typeof DeviceMotionEvent==='undefined'||typeof DeviceMotionEvent.requestPermission!=='function'){
     initAll();
     document.getElementById('permOverlay').classList.add('hidden');
+  }
+});
+
+// Re-acquire Wake Lock if tab comes back to foreground while monitoring
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='visible' && monitoring && !_wakeLock && 'wakeLock' in navigator){
+    navigator.wakeLock.request('screen')
+      .then(wl=>{ _wakeLock=wl; _wakeLock.addEventListener('release',()=>{ _wakeLock=null; }); })
+      .catch(()=>{});
   }
 });
 </script>
