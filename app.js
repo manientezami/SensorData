@@ -289,23 +289,20 @@ const App = (() => {
     const gps = _lastGPS || {};
     const r   = _lastProcessed || {};
 
-    // Speed
-    _setText('speedVal', gps.speed_mph != null ? gps.speed_mph.toFixed(1) : '--');
+    // Speed gauge
+    const speedMph = gps.speed_mph ?? 0;
+    _setText('speedVal', speedMph > 0 ? speedMph.toFixed(1) : '--');
+    if (typeof window.setGaugeSpeed === 'function') window.setGaugeSpeed(speedMph);
 
     // GNSS
     const gnssOk = gps.accuracy_m != null && gps.accuracy_m < CONFIG.gnss.ACCURACY_GOOD_M;
-    _setText('gnssStatus', gps.accuracy_m != null
-      ? `±${gps.accuracy_m.toFixed(0)}m  Acc: ${gnssOk ? 'GOOD' : 'POOR'}`
-      : 'No GNSS');
+    _setText('gnssStatus', gps.latitude != null ? (gnssOk ? '3D Fix' : '2D / Poor') : 'No fix');
     _setText('satCount', gps.satellite_count ?? '—');
+    _setText('gnssAccuracy', gps.accuracy_m != null ? `±${gps.accuracy_m.toFixed(0)} m` : '—');
 
     // Comfort traffic light
     const status = r.comfort_status || 'GREEN';
-    const tlEl   = document.getElementById('trafficLight');
-    if (tlEl) {
-      tlEl.className = 'traffic-light tl-' + status.toLowerCase();
-      tlEl.textContent = status;
-    }
+    if (typeof window.setTrafficLight === 'function') window.setTrafficLight(status);
 
     // Comfort values
     _setText('valCcy', r.ccy != null ? r.ccy.toFixed(3) : '--');
@@ -528,11 +525,14 @@ const App = (() => {
 
   function _setButtonState(state) {
     const startBtn = document.getElementById('startBtn');
-    const stopBtn  = document.getElementById('stopBtn');
-    if (!startBtn || !stopBtn) return;
-    startBtn.disabled = state === 'recording';
-    stopBtn.disabled  = state !== 'recording';
-    startBtn.classList.toggle('active', state === 'recording');
+    if (!startBtn) return;
+    if (state === 'recording') {
+      startBtn.classList.add('recording');
+      startBtn.innerHTML = '<svg viewBox="0 0 20 20" class="btn-svg" style="fill:currentColor"><rect x="4" y="4" width="12" height="12"/></svg> Stop Recording';
+    } else {
+      startBtn.classList.remove('recording');
+      startBtn.innerHTML = '<svg viewBox="0 0 20 20" class="btn-svg" style="fill:currentColor"><polygon points="5,3 17,10 5,17"/></svg> Start / Stop';
+    }
   }
 
   function _setQuality(flag) {
@@ -578,8 +578,9 @@ const App = (() => {
   // ── UI binding ─────────────────────────────────────────────────────────────
 
   function _bindUI() {
-    document.getElementById('startBtn')?.addEventListener('click', startRecording);
-    document.getElementById('stopBtn')?.addEventListener('click',  stopRecording);
+    document.getElementById('startBtn')?.addEventListener('click', () => {
+      _recording ? stopRecording() : startRecording();
+    });
     document.getElementById('exportBtn')?.addEventListener('click', exportCsv);
     document.getElementById('calBtn')?.addEventListener('click',   startCalibration);
     window.addEventListener('resize', () => MapModule.invalidateSize());

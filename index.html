@@ -6,196 +6,251 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#0d1418">
+  <meta name="theme-color" content="#1a3a5c">
   <title>MoniRail Web Rider</title>
-
-  <!-- Styles -->
   <link rel="stylesheet" href="css/style.css">
-
-  <!-- Leaflet CSS (CDN) -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
         integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
-
-  <!--
-    CAPACITOR WRAPPER NOTE
-    ════════════════════════════════════════════════════════════════════════
-    If iPhone browser restrictions prevent reliable DeviceMotion access:
-
-    1. Install Capacitor:
-         npm install @capacitor/core @capacitor/cli
-         npx cap init "MoniRail Web Rider" "com.monirail.webrider"
-         npm install @capacitor/ios
-
-    2. In sensors.js, replace _startMotion() and _startGPS() with calls to
-       the Motion and Geolocation Capacitor plugins:
-         import { Motion } from '@capacitor/motion';
-         import { Geolocation } from '@capacitor/geolocation';
-       The callback interface (_emit('motion', sample)) remains unchanged.
-
-    3. For CSV export, replace _downloadBlob() in export.js with:
-         import { Filesystem, Directory } from '@capacitor/filesystem';
-         await Filesystem.writeFile({ path, data, directory: Directory.Documents });
-
-    4. Build:
-         npx cap add ios
-         npx cap copy
-         npx cap open ios  (requires Xcode)
-    ════════════════════════════════════════════════════════════════════════
-  -->
 </head>
-
 <body>
 <div id="app">
 
-  <!-- ── Header ─────────────────────────────────────────────────────────── -->
+  <!-- ══ HEADER ══════════════════════════════════════════════════════════ -->
   <header id="header">
-    <div class="logo-mark">
-      <div class="logo-icon"></div>
-      <span class="logo-text">MoniRail</span>
+    <div class="logo-wrap">
+      <svg class="logo-svg" viewBox="0 0 38 38" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="19" cy="19" r="17" fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+        <circle cx="19" cy="19" r="9"  fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="1.5"/>
+        <line x1="19" y1="2"  x2="19" y2="10" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+        <line x1="19" y1="28" x2="19" y2="36" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+        <line x1="2"  y1="19" x2="10" y2="19" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+        <line x1="28" y1="19" x2="36" y2="19" stroke="rgba(255,255,255,0.9)" stroke-width="2"/>
+        <circle cx="19" cy="19" r="3.5" fill="rgba(255,255,255,0.9)"/>
+      </svg>
+      <span class="logo-text"><em>Moni</em>Rail</span>
     </div>
-    <span class="header-title">Web&nbsp;Rider</span>
-    <span id="elapsedTime">--:--</span>
+    <div class="header-center">
+      <span class="header-title">Web Rider</span>
+    </div>
+    <span id="elapsedTime" class="elapsed-time">--:--</span>
   </header>
 
-  <!-- ── Sensor availability + Quality ─────────────────────────────────── -->
-  <div class="card" style="margin-top:8px">
-    <div class="card-body" style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px">
-      <span id="sensorAvailBadge">Probing sensors…</span>
-      <span id="qualityBadge" class="quality-badge q-good">GOOD</span>
-    </div>
+  <!-- ══ STATUS CHIPS ══════════════════════════════════════════════════════ -->
+  <div id="chipBar">
+    <span id="sensorAvailBadge" class="chip chip-neutral">Probing sensors…</span>
+    <span id="qualityBadge"     class="chip chip-good">GOOD</span>
+    <span id="sampHealthFlag"   class="chip hf-ok">RATE OK</span>
   </div>
 
-  <!-- ── Control row ───────────────────────────────────────────────────── -->
+  <!-- ══ CONTROL BUTTONS ═══════════════════════════════════════════════════ -->
   <div id="controlRow">
-    <button id="startBtn"  class="btn btn-start">▶ Start</button>
-    <button id="stopBtn"   class="btn btn-stop"  disabled>■ Stop</button>
-    <button id="exportBtn" class="btn btn-export">↓ CSV</button>
+    <button id="startBtn" class="btn btn-start">
+      <svg viewBox="0 0 20 20" class="btn-svg"><polygon points="5,3 17,10 5,17"/></svg>
+      Start / Stop
+    </button>
+    <!-- Hidden twin used by app.js state machine; kept for JS compat -->
+    <button id="stopBtn" style="display:none" disabled></button>
+    <button id="exportBtn" class="btn btn-csv">
+      <svg viewBox="0 0 20 20" class="btn-svg"><path d="M10 3v10M5 9l5 5 5-5M3 16h14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/></svg>
+      Log CSV
+    </button>
   </div>
 
-  <!-- ── Calibration ───────────────────────────────────────────────────── -->
+  <!-- ══ CALIBRATION ══════════════════════════════════════════════════════ -->
+  <div class="card cal-card">
+    <div class="card-head">
+      <span class="card-title">📐 Phone Mounting &amp; Calibration</span>
+      <span id="calStatus" class="chip chip-warn">Not calibrated</span>
+    </div>
+    <div class="cal-body">
+      <select id="mountingSelect">
+        <option value="PORTRAIT_FACE_FORWARD">Portrait — screen faces forward</option>
+        <option value="PORTRAIT_FACE_UP">Portrait — screen faces up (flat)</option>
+        <option value="LANDSCAPE_FACE_FORWARD">Landscape — screen faces forward</option>
+        <option value="CUSTOM">Custom — capture calibration</option>
+      </select>
+      <button id="calBtn" class="btn btn-apply">Apply</button>
+    </div>
+    <div id="calProgress" class="cal-progress-txt"></div>
+  </div>
+
+  <!-- ══ LIVE STATUS ROW: GAUGE + COMFORT ══════════════════════════════════ -->
+  <div id="liveRow">
+
+    <!-- ── Left: Speed gauge + GNSS ─────────────────────────────────────── -->
+    <div id="gaugeCol">
+      <!-- SVG Semicircular Gauge -->
+      <div class="gauge-container">
+        <svg id="gaugeSvg" viewBox="0 0 200 115" xmlns="http://www.w3.org/2000/svg">
+          <!-- Outer shadow ring -->
+          <path d="M18 100 A82 82 0 0 1 182 100"
+                fill="none" stroke="#c8d6e8" stroke-width="14" stroke-linecap="round"/>
+          <!-- Active fill arc -->
+          <path id="gaugeArc" d="M18 100 A82 82 0 0 1 18 100"
+                fill="none" stroke="#1a5fb4" stroke-width="14" stroke-linecap="round"/>
+          <!-- Fine tick marks (9 ticks = 0 25 50 75 100 125 150 175 200) -->
+          <g stroke="#7a8fa8" stroke-width="1.2" stroke-linecap="round">
+            <line id="t0"  x1="18"  y1="100" x2="24"  y2="100"/>
+            <line id="t1"  x1="100" y1="18"  x2="100" y2="24" transform="rotate(-112.5 100 100)"/>
+            <line id="t2"  x1="100" y1="18"  x2="100" y2="24" transform="rotate(-90 100 100)"/>
+            <line id="t3"  x1="100" y1="18"  x2="100" y2="24" transform="rotate(-67.5 100 100)"/>
+            <line id="t4"  x1="100" y1="18"  x2="100" y2="24" transform="rotate(-45 100 100)"/>
+            <line id="t5"  x1="100" y1="18"  x2="100" y2="24" transform="rotate(-22.5 100 100)"/>
+            <line id="t6"  x1="100" y1="18"  x2="100" y2="24"/>
+            <line id="t7"  x1="100" y1="18"  x2="100" y2="24" transform="rotate(22.5 100 100)"/>
+            <line id="t8"  x1="182" y1="100" x2="176" y2="100"/>
+          </g>
+          <!-- Scale labels -->
+          <text x="14"  y="112" class="g-lbl">0</text>
+          <text x="38"  y="44"  class="g-lbl">50</text>
+          <text x="86"  y="22"  class="g-lbl">100</text>
+          <text x="134" y="44"  class="g-lbl">150</text>
+          <text x="168" y="112" class="g-lbl">200</text>
+          <!-- Needle -->
+          <line id="gaugeNeedle"
+                x1="100" y1="100" x2="100" y2="26"
+                stroke="#c0392b" stroke-width="3" stroke-linecap="round"
+                transform="rotate(-90 100 100)"/>
+          <!-- Pivot -->
+          <circle cx="100" cy="100" r="8"  fill="#1a3a5c"/>
+          <circle cx="100" cy="100" r="3.5" fill="#e8eef6"/>
+          <!-- Digital readout -->
+          <text id="gaugeSpeedNum" x="100" y="86" class="g-speed">--</text>
+        </svg>
+      </div>
+      <div class="gauge-unit-label">Speed (mph)</div>
+
+      <!-- GNSS info block -->
+      <div class="gnss-block">
+        <div class="gnss-row-item">
+          <span class="gnss-key">GNSS Validity:</span>
+          <span id="gnssStatus" class="gnss-val">No fix</span>
+        </div>
+        <div class="gnss-row-item">
+          <span class="gnss-key">Number of Satellites:</span>
+          <span id="satCount" class="gnss-val">—</span>
+        </div>
+        <div class="gnss-row-item">
+          <span class="gnss-key">Accuracy:</span>
+          <span id="gnssAccuracy" class="gnss-val">—</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Right: Traffic light + direction + values ─────────────────────── -->
+    <div id="comfortCol">
+
+      <div class="comfort-top-row">
+        <!-- Direction arrow -->
+        <div class="dir-wrap">
+          <svg viewBox="0 0 32 52" class="dir-arrow-svg" xmlns="http://www.w3.org/2000/svg">
+            <polygon points="16,1 31,22 22,22 22,51 10,51 10,22 1,22"
+                     fill="#1a5fb4" stroke="#0d2a4a" stroke-width="1"/>
+          </svg>
+          <div class="dir-text">Travel<br>direction</div>
+        </div>
+
+        <!-- Vertical traffic light -->
+        <div class="tl-wrap">
+          <div class="tl-housing">
+            <div class="tl-slot">
+              <div class="tl-bulb" id="bulbRed"></div>
+              <span class="tl-side-label">Ccz</span>
+            </div>
+            <div class="tl-slot">
+              <div class="tl-bulb" id="bulbAmber"></div>
+              <span class="tl-side-label">Ccy</span>
+            </div>
+            <div class="tl-slot">
+              <div class="tl-bulb tl-on-green" id="bulbGreen"></div>
+              <span class="tl-side-label"></span>
+            </div>
+          </div>
+          <div class="tl-caption">Comfort</div>
+        </div>
+      </div>
+
+      <!-- Metric value table -->
+      <div class="metric-grid">
+        <div class="mg-row">
+          <span class="mg-lbl">Ccz</span>
+          <span id="valCcz" class="mg-val">--</span>
+        </div>
+        <div class="mg-row">
+          <span class="mg-lbl">Ccy</span>
+          <span id="valCcy" class="mg-val">--</span>
+        </div>
+        <div class="mg-row">
+          <span class="mg-lbl">PCT</span>
+          <span id="valPct" class="mg-val">--</span>
+        </div>
+        <div class="mg-row">
+          <span class="mg-lbl">PDE</span>
+          <span id="valPde" class="mg-val">--</span>
+        </div>
+        <div class="mg-row">
+          <span class="mg-lbl">Lat. disp</span>
+          <span id="valLatDisp" class="mg-val">-- mm</span>
+        </div>
+        <div class="mg-row">
+          <span class="mg-lbl">Vert. disp</span>
+          <span id="valVertDisp" class="mg-val">-- mm</span>
+        </div>
+      </div>
+    </div>
+  </div><!-- #liveRow -->
+
+  <!-- ══ MOTION CHART ══════════════════════════════════════════════════════ -->
   <div class="card">
-    <div class="card-header">
-      <h3>Phone Mounting &amp; Calibration</h3>
-      <span id="calStatus" class="cal-warn">Not calibrated</span>
+    <div class="card-head">
+      <span class="card-title">Vertical and lateral motion</span>
+      <span id="sampleCount" class="chip chip-neutral">0 samples</span>
     </div>
-    <div class="card-body">
-      <div class="cal-row">
-        <select id="mountingSelect">
-          <option value="PORTRAIT_FACE_FORWARD">Portrait — screen faces forward</option>
-          <option value="PORTRAIT_FACE_UP">Portrait — screen faces up (flat)</option>
-          <option value="LANDSCAPE_FACE_FORWARD">Landscape — screen faces forward</option>
-          <option value="CUSTOM">Custom — capture calibration</option>
-        </select>
-        <button id="calBtn" class="btn btn-export" style="padding:8px 12px;font-size:11px">Apply</button>
-      </div>
-      <div id="calProgress" style="font-size:10px;color:var(--text-sec);margin-top:4px;font-family:var(--font-data)"></div>
+    <div id="motionChartWrap">
+      <canvas id="motionChart"></canvas>
     </div>
   </div>
 
-  <!-- ── Speed + Traffic light + GNSS ─────────────────────────────────── -->
-  <div id="statusRow">
-    <!-- Speed gauge -->
-    <div class="speed-panel">
-      <div class="speed-value" id="speedVal">--</div>
-      <div class="speed-unit">mph</div>
-      <div class="gnss-row" id="gnssStatus">No GNSS</div>
+  <!-- ══ MAP ══════════════════════════════════════════════════════════════ -->
+  <div class="card map-card">
+    <div class="card-head">
+      <span class="card-title">Route Map</span>
     </div>
-
-    <!-- Traffic light -->
-    <div class="traffic-light tl-green" id="trafficLight">GREEN</div>
-
-    <!-- GNSS detail -->
-    <div class="gnss-panel">
-      <div class="data-row">
-        <span class="data-label">Sats</span>
-        <span class="data-value" id="satCount">—</span>
-      </div>
-      <div class="data-row">
-        <span class="data-label">Ccy</span>
-        <span class="data-value" id="valCcy">--</span>
-      </div>
-      <div class="data-row">
-        <span class="data-label">Ccz</span>
-        <span class="data-value" id="valCcz">--</span>
-      </div>
-      <div class="data-row">
-        <span class="data-label">PCT</span>
-        <span class="data-value" id="valPct">--</span>
-      </div>
-      <div class="data-row">
-        <span class="data-label">PDE</span>
-        <span class="data-value" id="valPde">--</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Displacement panel ─────────────────────────────────────────────── -->
-  <div class="card">
-    <div class="card-header"><h3>Displacement Estimate</h3></div>
-    <div class="card-body">
-      <div class="data-row">
-        <span class="data-label">Lateral</span>
-        <span class="data-value" id="valLatDisp">-- mm</span>
-      </div>
-      <div class="data-row">
-        <span class="data-label">Vertical</span>
-        <span class="data-value" id="valVertDisp">-- mm</span>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Motion chart ───────────────────────────────────────────────────── -->
-  <div class="card">
-    <div class="card-header">
-      <h3>Vertical &amp; Lateral Motion</h3>
-      <span id="sampleCount" style="font-family:var(--font-data);font-size:10px;color:var(--text-sec)">0 samples</span>
-    </div>
-    <div class="card-body" style="padding:8px">
-      <div id="motionChartWrap">
-        <canvas id="motionChart"></canvas>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Map ────────────────────────────────────────────────────────────── -->
-  <div class="card">
-    <div class="card-header"><h3>Route Map</h3></div>
     <div id="map"></div>
   </div>
 
-  <!-- ── Validation panel ──────────────────────────────────────────────── -->
+  <!-- ══ SENSOR VALIDATION ════════════════════════════════════════════════ -->
   <div class="card">
-    <div class="card-header">
-      <h3>Sensor Validation</h3>
-      <span id="sampHealthFlag" class="health-flag hf-ok">OK</span>
+    <div class="card-head">
+      <span class="card-title">Sensor Validation</span>
     </div>
-    <div class="card-body">
-      <div class="val-grid">
-        <div class="data-row"><span class="data-label">Req. Rate</span><span class="data-value" id="reqHz">—</span></div>
-        <div class="data-row"><span class="data-label">Deliv. Rate</span><span class="data-value" id="delivHz">—</span></div>
-        <div class="data-row"><span class="data-label">Min Interval</span><span class="data-value" id="minInt">—</span></div>
-        <div class="data-row"><span class="data-label">Max Interval</span><span class="data-value" id="maxInt">—</span></div>
-        <div class="data-row"><span class="data-label">Jitter</span><span class="data-value" id="jitter">—</span></div>
-        <div class="data-row"><span class="data-label">Drops</span><span class="data-value" id="drops">0</span></div>
-      </div>
+    <div class="val-grid">
+      <div class="val-cell"><span class="val-lbl">Requested</span><span id="reqHz"    class="val-val">—</span></div>
+      <div class="val-cell"><span class="val-lbl">Delivered</span><span id="delivHz"  class="val-val">—</span></div>
+      <div class="val-cell"><span class="val-lbl">Min interval</span><span id="minInt" class="val-val">—</span></div>
+      <div class="val-cell"><span class="val-lbl">Max interval</span><span id="maxInt" class="val-val">—</span></div>
+      <div class="val-cell"><span class="val-lbl">Jitter</span><span id="jitter"      class="val-val">—</span></div>
+      <div class="val-cell"><span class="val-lbl">Drop gaps</span><span id="drops"    class="val-val">0</span></div>
     </div>
   </div>
 
-  <!-- ── Event log table ────────────────────────────────────────────────── -->
-  <div class="card" style="margin-bottom:16px">
-    <div class="card-header"><h3>Event Log</h3></div>
+  <!-- ══ EXCEEDANCE TABLE ══════════════════════════════════════════════════ -->
+  <div class="card" style="margin-bottom:24px">
+    <div class="card-head">
+      <span class="card-title">Exceedance summary table:</span>
+    </div>
     <div id="eventTableWrap">
       <table id="eventTable">
         <thead>
           <tr>
             <th>Location</th>
-            <th>Time (UTC)</th>
-            <th>Event Type</th>
+            <th>Time</th>
+            <th>Exceedance Type</th>
             <th>Value</th>
           </tr>
         </thead>
         <tbody id="eventTableBody">
-          <tr><td colspan="4" style="color:var(--text-sec);text-align:center;padding:16px">No events yet</td></tr>
+          <tr class="tbl-empty"><td colspan="4">No exceedances recorded</td></tr>
         </tbody>
       </table>
     </div>
@@ -203,21 +258,15 @@
 
 </div><!-- #app -->
 
-<!-- Journey summary overlay (shown on stop) -->
 <div id="summaryOverlay"></div>
-
-<!-- Toast -->
 <div id="toast" class="toast"></div>
 
-<!-- ── External libraries ──────────────────────────────────────────────── -->
-<!-- Leaflet JS -->
+<!-- Libraries -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
         integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV/XN/WLs=" crossorigin=""></script>
-
-<!-- Chart.js -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 
-<!-- ── App modules (load order matters) ────────────────────────────────── -->
+<!-- App modules -->
 <script src="js/config.js"></script>
 <script src="js/sensors.js"></script>
 <script src="js/calibration.js"></script>
@@ -227,5 +276,54 @@
 <script src="js/export.js"></script>
 <script src="js/app.js"></script>
 
+<!-- Gauge + traffic light JS helpers (called from app.js) -->
+<script>
+/**
+ * Update the SVG semicircular gauge needle and arc fill.
+ * @param {number} mph  Current speed in mph (0-200)
+ */
+window.setGaugeSpeed = function(mph) {
+  const MAX = 200;
+  const f   = Math.min(Math.max((isFinite(mph) ? mph : 0) / MAX, 0), 1);
+  const R   = 82, cx = 100, cy = 100;
+
+  // Arc: starts at left (180°) sweeps clockwise to right (0°)
+  // angle = π  →  π - f*π  in standard math (left to right)
+  const arcAngle = Math.PI - f * Math.PI;
+  const ex = cx + R * Math.cos(arcAngle);
+  const ey = cy - R * Math.sin(arcAngle);   // SVG y-axis flipped
+  const arc = document.getElementById('gaugeArc');
+  if (arc) {
+    if (f <= 0) {
+      arc.setAttribute('d', `M18 100 A${R} ${R} 0 0 1 18 100`);
+    } else {
+      const la = f > 0.5 ? 1 : 0;
+      arc.setAttribute('d', `M18 100 A${R} ${R} 0 ${la} 1 ${ex.toFixed(2)} ${ey.toFixed(2)}`);
+    }
+  }
+
+  // Needle: rotate from -90 (left=0 mph) to +90 (right=200 mph)
+  const needle = document.getElementById('gaugeNeedle');
+  if (needle) needle.setAttribute('transform', `rotate(${-90 + f * 180} 100 100)`);
+
+  // Digital number
+  const num = document.getElementById('gaugeSpeedNum');
+  if (num) num.textContent = isFinite(mph) ? Math.round(mph) : '--';
+};
+
+/**
+ * Set traffic light state.
+ * @param {'GREEN'|'AMBER'|'RED'} state
+ */
+window.setTrafficLight = function(state) {
+  const r = document.getElementById('bulbRed');
+  const a = document.getElementById('bulbAmber');
+  const g = document.getElementById('bulbGreen');
+  if (!r) return;
+  r.className = 'tl-bulb' + (state === 'RED'   ? ' tl-on-red'   : '');
+  a.className = 'tl-bulb' + (state === 'AMBER' ? ' tl-on-amber' : '');
+  g.className = 'tl-bulb' + (state === 'GREEN' ? ' tl-on-green' : '');
+};
+</script>
 </body>
 </html>
