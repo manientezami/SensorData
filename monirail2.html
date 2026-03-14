@@ -219,25 +219,25 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
           <div class="vlbl">CCZ</div>
           <div class="vnum good" id="numCcz">—</div>
           <div class="vunit">m/s² RMS</div>
-          <div class="vdesc">VERTICAL · Wb</div>
+          <div class="vdesc">Vertical Comfort</div>
         </div>
         <div class="vbox good" id="boxCcy">
           <div class="vlbl">CCY</div>
           <div class="vnum good" id="numCcy">—</div>
           <div class="vunit">m/s² RMS</div>
-          <div class="vdesc">LATERAL · Wd</div>
+          <div class="vdesc">Lateral Comfort</div>
         </div>
         <div class="vbox good" id="boxPct">
           <div class="vlbl">Pct</div>
           <div class="vnum good" id="numPct">—</div>
           <div class="vunit">m/s² QS</div>
-          <div class="vdesc">CURVE TRANSIT.</div>
+          <div class="vdesc">Curve Transition</div>
         </div>
         <div class="vbox good" id="boxPde">
           <div class="vlbl">Pde</div>
           <div class="vnum good" id="numPde">0</div>
           <div class="vunit">events</div>
-          <div class="vdesc">DISCRETE JOLTS</div>
+          <div class="vdesc">Discrete Jolts</div>
         </div>
       </div>
       <div class="tlight-wrap">
@@ -254,7 +254,7 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
   <!-- Session stats -->
   <div class="card">
     <div class="card-hdr">
-      <span>SESSION STATISTICS</span>
+      <span>Session Statistics</span>
       <span class="card-hdr-accent" id="sessionTime">00:00</span>
     </div>
     <div class="stats-grid">
@@ -276,11 +276,11 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
 
   <!-- Chart -->
   <div class="card">
-    <div class="card-hdr"><span>CONTINUOUS COMFORT HISTORY — 60 s</span></div>
+    <div class="card-hdr"><span>Continuous Ride Comfort</span></div>
     <div class="legend">
-      <div class="leg"><div class="leg-l" style="background:var(--acc)"></div>Ccz Wb</div>
-      <div class="leg"><div class="leg-l" style="background:var(--orange)"></div>Ccy Wd</div>
-      <div class="leg"><div class="leg-l" style="background:var(--green)"></div>Pct curve</div>
+      <div class="leg"><div class="leg-l" style="background:var(--acc)"></div>Ccz</div>
+      <div class="leg"><div class="leg-l" style="background:var(--orange)"></div>Ccy</div>
+      <div class="leg"><div class="leg-l" style="background:var(--green)"></div>Pct</div>
     </div>
     <canvas id="chartCanvas" height="140"></canvas>
   </div>
