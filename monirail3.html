@@ -215,19 +215,27 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
         <canvas id="speedCanvas" width="90" height="80"></canvas>
         <div class="speed-lbl">mph</div>
       </div>
-      <div class="val-grid">
+      <div class="val-grid" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px">
         <div class="vbox good" id="boxCcz">
           <div class="vlbl">CCZ</div>
           <div class="vnum good" id="numCcz">—</div>
-          <div class="vunit">m/s² RMS</div>
-          <div class="vdesc">Vertical Comfort</div>
+          <div class="vunit">m/s²</div>
+          <div class="vdesc">Vertical</div>
         </div>
         <div class="vbox good" id="boxCcy">
           <div class="vlbl">CCY</div>
           <div class="vnum good" id="numCcy">—</div>
-          <div class="vunit">m/s² RMS</div>
-          <div class="vdesc">Lateral Comfort</div>
+          <div class="vunit">m/s²</div>
+          <div class="vdesc">Lateral</div>
         </div>
+        <div class="vbox good" id="boxCcx">
+          <div class="vlbl">CCX</div>
+          <div class="vnum good" id="numCcx">—</div>
+          <div class="vunit">m/s²</div>
+          <div class="vdesc">Longitudinal</div>
+        </div>
+      </div>
+      <div class="val-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:5px;margin-top:5px">
         <div class="vbox good" id="boxPct">
           <div class="vlbl">Pct</div>
           <div class="vnum good" id="numPct">—</div>
@@ -236,7 +244,7 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
         </div>
         <div class="vbox good" id="boxPde">
           <div class="vlbl">Pde</div>
-          <div class="vnum good" id="numPde">0</div>
+          <div class="vnum good" id="numPde">0%</div>
           <div class="vunit">%</div>
           <div class="vdesc">Discrete Jolts</div>
         </div>
@@ -267,6 +275,10 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
         <div class="stat-row"><span class="skey">Ccy Mean/Peak</span><span class="sval" id="statCcy">—/—</span></div>
         <div class="bar-track"><div class="bar-fill bar-y" id="barCcy" style="width:0%"></div></div>
       </div>
+      <div style="grid-column:span 2">
+        <div class="stat-row"><span class="skey">Ccx Mean/Peak</span><span class="sval" id="statCcx">—/—</span></div>
+        <div class="bar-track"><div class="bar-fill" id="barCcx" style="width:0%;background:linear-gradient(90deg,var(--purple),var(--acc))"></div></div>
+      </div>
     </div>
     <div class="bottom-row">
       <div class="mini"><div class="mlbl">Pct Peak %</div><div class="mval" id="miniPctPk">—</div></div>
@@ -281,6 +293,7 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
     <div class="legend">
       <div class="leg"><div class="leg-l" style="background:var(--acc)"></div>Ccz</div>
       <div class="leg"><div class="leg-l" style="background:var(--orange)"></div>Ccy</div>
+      <div class="leg"><div class="leg-l" style="background:var(--purple)"></div>Ccx</div>
     </div>
     <canvas id="chartCanvas" height="140"></canvas>
   </div>
@@ -385,32 +398,87 @@ class RollingRMS {
  resize(N){this._r(N);}
  reset(){this.buf.fill(0);this.idx=0;this.sum=0;this.n=0;}
 }
+/* Signal processing module - proprietary MoniRail Ltd */
+function buildWp(fs){
+ const _OOhpmOMBk=0*2*Math.PI, _YBBboqFzl=100*2*Math.PI, _IxwpNRlQh=1/Math.SQRT2;
+ const _fijnROT=2*2*Math.PI, _JoSVlOelv=2*2*Math.PI, _TxxxBGcc=(630000/1e6);
+ return new CascadeFilter([
+ biquadBilinear([1,0,0], [1,_OOhpmOMBk/_IxwpNRlQh||0,_OOhpmOMBk*_OOhpmOMBk||1e-30], fs),
+ biquadBilinear([0,0,_YBBboqFzl*_YBBboqFzl], [1,_YBBboqFzl/_IxwpNRlQh,_YBBboqFzl*_YBBboqFzl], fs),
+ biquadBilinear([0,_JoSVlOelv*_JoSVlOelv,_JoSVlOelv*_JoSVlOelv*_fijnROT],[_fijnROT,_fijnROT*_JoSVlOelv/_TxxxBGcc,_fijnROT*_JoSVlOelv*_JoSVlOelv],fs)
+ ]);
+}
+class RollingMean{
+ constructor(N){this._r(N);}
+ _r(N){this.N=N;this.buf=new Float64Array(N);this.idx=0;this.sum=0;this.n=0;}
+ push(v){this.sum-=this.buf[this.idx];this.buf[this.idx]=v;this.sum+=v;this.idx=(this.idx+1)%this.N;if(this.n<this.N)this.n++;}
+ get(){return this.n?this.sum/this.n:0;}
+ resize(N){this._r(N);}
+ reset(){this.buf.fill(0);this.idx=0;this.sum=0;this.n=0;}
+}
+class RollingMax{
+ constructor(N){this._r(N);}
+ _r(N){this.N=N;this.buf=new Float64Array(N);this.idx=0;this.n=0;}
+ push(v){this.buf[this.idx]=v;this.idx=(this.idx+1)%this.N;if(this.n<this.N)this.n++;}
+ get(){let m=-Infinity;const e=Math.min(this.n,this.N);for(let i=0;i<e;i++){if(this.buf[i]>m)m=this.buf[i];}return e?m:0;}
+ resize(N){this._r(N);}
+ reset(){this.buf.fill(0);this.idx=0;this.n=0;}
+}
+class RollingMin{
+ constructor(N){this._r(N);}
+ _r(N){this.N=N;this.buf=new Float64Array(N);this.idx=0;this.n=0;}
+ push(v){this.buf[this.idx]=v;this.idx=(this.idx+1)%this.N;if(this.n<this.N)this.n++;}
+ get(){let m=Infinity;const e=Math.min(this.n,this.N);for(let i=0;i<e;i++){if(this.buf[i]<m)m=this.buf[i];}return e?m:0;}
+ resize(N){this._r(N);}
+ reset(){this.buf.fill(0);this.idx=0;this.n=0;}
+}
+function computePct(_xwHVZS, _drGUtDjmQ, _gcMqSayV,
+ _rUyl0J, _Pgluzj, _1zaSAylV1,
+ _C_hOHIXs, _ZxIEsOy, _ggwQOjL){
+ const _GReqeEylg=(285400/1e6), _hYrgjl=(206900/1e6), _pga_BsAg=(111000/1e6), _Qp1Qdj=(3640000/1e6), _OvCrCqC=(2283000/1e6);
+ _rUyl0J.push(_xwHVZS); _Pgluzj.push(_drGUtDjmQ); _1zaSAylV1.push(_gcMqSayV);
+ _C_hOHIXs.push(Math.abs(_rUyl0J.get()));
+ _ZxIEsOy.push(Math.abs(_Pgluzj.get()));
+ _ggwQOjL.push(Math.abs(_1zaSAylV1.get()));
+ const _ysjlLUd=Math.max(0, _GReqeEylg*_C_hOHIXs.get() + _hYrgjl*_ggwQOjL.get() - _pga_BsAg);
+ const _jTxreBW=Math.pow(_Qp1Qdj*_ZxIEsOy.get(), _OvCrCqC);
+ return 100*(_ysjlLUd+_jTxreBW);
+}
+function computePde(_xwHVZS, _NtiDWvpvq, _TEBANhH, _oRI_JqaEC, _TNQjUMdmk){
+ const _VLNDvO=(166200/1e6), _WWKwZuI=(270100/1e6), _dHlmt0u=(370000/1e6);
+ _NtiDWvpvq.push(_xwHVZS); _TEBANhH.push(_xwHVZS); _oRI_JqaEC.push(_xwHVZS);
+ const _jCSGmvKNT=_TEBANhH.get()-_oRI_JqaEC.get();
+ const _EhATZD=Math.max(0, _VLNDvO*_jCSGmvKNT + _WWKwZuI*Math.abs(_NtiDWvpvq.get()) - _dHlmt0u);
+ _TNQjUMdmk.push(_EhATZD);
+ return 100*_TNQjUMdmk.get();
+}
+
 // ============================================================
 // STATE
 // ============================================================
 const WL_S=5;           // RMS window [s] — matches Wl in comfort.m
 let monitoring=false, recording=false;
 let startTime=0, sessionSec=0;
-let fWb=null, fWd=null, fPctLP=null;
+let fWb=null, fWd=null, fWp=null;
 let fsEst=100, fsKnown=false;
 let rmsZ=new RollingRMS(WL_S*100);
 let rmsY=new RollingRMS(WL_S*100);
-let ccz=0, ccy=0, pct=0;
+let rmsX=new RollingRMS(WL_S*100);
+let ccz=0, ccy=0, ccx=0, pct=0, pde=0;
 
 // Event log triggers:
 //   Pde  > 10 %       (discrete jolt percentage)
 //   Ccz  > 0.4 m/s²   (vertical comfort threshold)
 //   Ccy  > 0.4 m/s²   (lateral comfort threshold)
 // 2 s debounce prevents double-counting the same event.
-let pdeBuf=new RollingRMS(10);
-let pdeCount=0, pdeLastT=0, pdeCurPk=0;
-let evalWindows=0, pde=0;  // Pde as %
+let pdeCount=0, pdeLastT=0;
+let evalWindows=0;
 const PDE_THRESH_PCT=10;   // % — Pde threshold
 const CC_THRESH=0.4;       // m/s² — Ccz / Ccy threshold
 const PDE_DEBOUNCE=2000;   // ms
 
 // Session accumulators
-let cczSum=0, ccySum=0, sN=0, cczPk=0, ccyPk=0, pctPk=0;
+let cczSum=0, ccySum=0, ccxSum=0, sN=0, cczPk=0, ccyPk=0, ccxPk=0, pctPk=0;
 
 // GPS
 let lat=null, lon=null, alt=null, gpsSpeed=0, gpsSpeedAcc=null, gpsNumSats=null;
@@ -425,7 +493,7 @@ let cht={ccz:[],ccy:[],pct:[]};
 
 // CSV
 let csvRows=[];
-const CSV_HDR='timestamp_ms,perf_ms,ax_ms2,ay_ms2,az_ms2,gx_degs,gy_degs,gz_degs,Ccz_ms2,Ccy_ms2,Pct,Pde,speed_mph,lat,lon,num_sats,speed_accuracy_mph';
+const CSV_HDR='timestamp_ms,perf_ms,ax_ms2,ay_ms2,az_ms2,gx_degs,gy_degs,gz_degs,Ccx_ms2,Ccz_ms2,Ccy_ms2,Pct,Pde,speed_mph,lat,lon,num_sats,speed_accuracy_mph';
 
 let uiTimer=null, chartTimer=null, sessTimer=null;
 
@@ -433,10 +501,16 @@ let uiTimer=null, chartTimer=null, sessTimer=null;
 // FILTER INIT
 // ============================================================
 function rebuildFilters(fs){
-  fWb=buildWb(fs); fWd=buildWd(fs); fPctLP=buildPctLP(fs);
+  fWb=buildWb(fs); fWd=buildWd(fs); fWp=buildWp(fs);
   rmsZ.resize(Math.max(10,Math.round(WL_S*fs)));
   rmsY.resize(Math.max(10,Math.round(WL_S*fs)));
-  pdeBuf.resize(Math.max(5,Math.round(0.1*fs)));  // 100 ms peak window
+  rmsX.resize(Math.max(10,Math.round(WL_S*fs)));
+  const N1=Math.max(5,Math.round(1*fs));
+  const N2=Math.max(5,Math.round(2*fs));
+  _pctMayWp=new RollingMean(N1); _pctMaRoll=new RollingMean(N1); _pctMaJerk=new RollingMean(N1);
+  _pctMxAY=new RollingMax(N1);  _pctMxRoll=new RollingMax(N1); _pctMxJerk=new RollingMax(N1);
+  _pdeMn2=new RollingMean(N2); _pdeMx2=new RollingMax(N2); _pdeMi2=new RollingMin(N2);
+  _pdeMxOut=new RollingMax(N2);
 }
 
 // ============================================================
@@ -465,12 +539,16 @@ function toggleMonitor(){monitoring?stopMonitor():startMonitor();}
 
 function startMonitor(){
   monitoring=true; startTime=Date.now();
-  ccz=0;ccy=0;pct=0;
-  cczSum=0;ccySum=0;sN=0;cczPk=0;ccyPk=0;pctPk=0;
-  pdeCount=0;pdeLastT=0;pdeCurPk=0;evalWindows=0;pde=0;
+  ccz=0;ccy=0;ccx=0;pct=0;pde=0;
+  cczSum=0;ccySum=0;ccxSum=0;sN=0;cczPk=0;ccyPk=0;ccxPk=0;pctPk=0;
+  pdeCount=0;pdeLastT=0;evalWindows=0;
+  _ayPrev=0;
   fsKnown=false;fsEst=100;
-  if(fWb){fWb.reset();fWd.reset();fPctLP.reset();}
-  rmsZ.reset();rmsY.reset();pdeBuf.reset();
+  if(fWb){fWb.reset();fWd.reset();fWp.reset();}
+  rmsZ.reset();rmsY.reset();rmsX.reset();
+  if(_pctMayWp){_pctMayWp.reset();_pctMaRoll.reset();_pctMaJerk.reset();
+    _pctMxAY.reset();_pctMxRoll.reset();_pctMxJerk.reset();
+    _pdeMn2.reset();_pdeMx2.reset();_pdeMi2.reset();_pdeMxOut.reset();}
   window.addEventListener('devicemotion',onMotion,{passive:true});
   const b=document.getElementById('btnStart');
   b.innerHTML='&#9209; Stop'; b.classList.add('running');
@@ -508,8 +586,8 @@ function onMotion(e){
     const fs=Math.round(1000/e.interval);
     if(fs>=10&&fs<=2000){
       fsEst=fs; rebuildFilters(fs);
-      fWb.reset();fWd.reset();fPctLP.reset();
-      rmsZ.reset();rmsY.reset();pdeBuf.reset();
+      fWb.reset();fWd.reset();fWp.reset();
+      rmsZ.reset();rmsY.reset();rmsX.reset();
       fsKnown=true;
     }
   }
@@ -524,43 +602,49 @@ function onMotion(e){
   let gx=0,gy=0,gz=0;
   if(e.rotationRate){gx=e.rotationRate.alpha||0;gy=e.rotationRate.beta||0;gz=e.rotationRate.gamma||0;}
 
-  // — Ccz : Wb-weighted vertical RMS —
+  // — Ccz : Wb-weighted vertical RMS (mean-removed) —
   const az_wb=fWb.tick(az);
-  rmsZ.push(az_wb);
-  ccz=rmsZ.get();
+  rmsZ.push(az_wb); ccz=rmsZ.get();
 
-  // — Ccy : Wd-weighted lateral RMS —
+  // — Ccy : Wd-weighted lateral RMS (mean-removed) —
   const ay_wd=fWd.tick(ay);
-  rmsY.push(ay_wd);
-  ccy=rmsY.get();
+  rmsY.push(ay_wd); ccy=rmsY.get();
 
-  // — Pct : quasi-static lateral (curve transition, EN12299 Annex C) —
-  // 0.3 Hz LP extracts cant-deficiency + centrifugal component.
-  const ay_qs=fPctLP.tick(ay);
-  pct=Math.abs(ay_qs);
+  // — Ccx : Wd-weighted longitudinal RMS (mean-removed) —
+  const ax_wd=fWd.tick(ax);
+  rmsX.push(ax_wd); ccx=rmsX.get();
+
+  // — Wp-filter lateral and roll for Pct/Pde —
+  const ay_wp=fWp.tick(ay);
+  const roll_wp=fWp.tick(gx);  // gx = roll rate rad/s from gyro
+  const jerkY=(ay-_ayPrev)*fsEst; _ayPrev=ay;
+
+  // — Pct: EN12299 curve transition formula —
+  if(_pctMayWp) pct=computePct(ay_wp,roll_wp,jerkY,
+    _pctMayWp,_pctMaRoll,_pctMaJerk,_pctMxAY,_pctMxRoll,_pctMxJerk);
   if(pct>pctPk)pctPk=pct;
 
-  // — Event detection ——————————————————————————————————
-  // Trigger on: Pde > 10%, Ccz > 0.4 m/s², or Ccy > 0.4 m/s²
-  pdeBuf.push(ay_wd);
-  const pk=pdeBuf.get()*Math.SQRT2;  // RMS × √2 ≈ peak
-  pdeCurPk=pk;
+  // — Pde: EN12299 discrete event formula —
+  if(_pdeMn2) pde=computePde(ay_wp,_pdeMn2,_pdeMx2,_pdeMi2,_pdeMxOut);
 
+  // — Event detection: Pde>10%, Ccx/Ccz/Ccy>0.4 m/s² —
   const pdeTriggered = pde > PDE_THRESH_PCT;
   const cczTriggered = ccz > CC_THRESH;
   const ccyTriggered = ccy > CC_THRESH;
+  const ccxTriggered = ccx > CC_THRESH;
 
-  if((pdeTriggered||cczTriggered||ccyTriggered)&&(perf-pdeLastT)>PDE_DEBOUNCE){
+  if((pdeTriggered||cczTriggered||ccyTriggered||ccxTriggered)&&(perf-pdeLastT)>PDE_DEBOUNCE){
     pdeLastT=perf;
     if(pdeTriggered) pdeCount++;
-    const trigger = pdeTriggered?'Pde':cczTriggered?'Ccz':'Ccy';
-    logEvent(ax,ay,az,ay_wd,az_wb,pk,trigger);
+    const trigger = pdeTriggered?'Pde':cczTriggered?'Ccz':ccyTriggered?'Ccy':'Ccx';
+    logEvent(ax,ay,az,ay_wd,az_wb,pde,trigger);
   }
 
   // — Accumulators —
-  sN++; cczSum+=ccz; ccySum+=ccy;
+  sN++; cczSum+=ccz; ccySum+=ccy; ccxSum+=ccx;
   if(ccz>cczPk)cczPk=ccz;
   if(ccy>ccyPk)ccyPk=ccy;
+  if(ccx>ccxPk)ccxPk=ccx;
 
   // — CSV —
   if(recording){
@@ -568,8 +652,8 @@ function onMotion(e){
       Date.now(),perf.toFixed(1),
       ax.toFixed(5),ay.toFixed(5),az.toFixed(5),
       gx.toFixed(4),gy.toFixed(4),gz.toFixed(4),
-      ccz.toFixed(6),ccy.toFixed(6),
-      pct.toFixed(6),pdeCount,
+      ccx.toFixed(6),ccz.toFixed(6),ccy.toFixed(6),
+      pct.toFixed(2),pde.toFixed(2),
       gpsSpeed.toFixed(3),
       lat!=null?lat.toFixed(7):'',
       lon!=null?lon.toFixed(7):'',
@@ -587,8 +671,8 @@ function logEvent(ax,ay,az,ay_wd,az_wb,pk,trigger){
   const ev={
     t:new Date().toTimeString().slice(0,8),
     trigger:trigger||'Pde',
-    ccz:ccz.toFixed(4), ccy:ccy.toFixed(4),
-    pct:pct.toFixed(2), pde:pde.toFixed(2), pk:pk.toFixed(4),
+    ccz:ccz.toFixed(4), ccy:ccy.toFixed(4), ccx:ccx.toFixed(4),
+    pct:pct.toFixed(1), pde:pde.toFixed(1), pk:pk.toFixed(4),
     spd:gpsSpeed.toFixed(1),
     lat:lat!=null?lat.toFixed(6):null,
     lon:lon!=null?lon.toFixed(6):null,
@@ -603,7 +687,7 @@ function logEvent(ax,ay,az,ay_wd,az_wb,pk,trigger){
     const col=pk>0.5?'#ff3b3b':'#ffb020';
     L.circleMarker([lat,lon],{radius:7,color:col,fillColor:col,fillOpacity:.85,weight:2})
       .addTo(leafMap)
-      .bindPopup(`<b>${ev.trigger} Event</b><br>Ccz:${ev.ccz} Ccy:${ev.ccy}<br>Pct:${ev.pct}% Pde:${ev.pde}%<br>${ev.spd} mph &nbsp; ${ev.t}`);
+      .bindPopup(`<b>${ev.trigger} Event</b><br>Ccz:${ev.ccz} Ccy:${ev.ccy} Ccx:${ev.ccx}<br>Pct:${ev.pct}% Pde:${ev.pde}%<br>${ev.spd} mph &nbsp; ${ev.t}`);
   }
 
   renderEvLog();
@@ -624,14 +708,14 @@ function renderEvLog(){
            style="color:var(--acc3);text-decoration:underline;cursor:pointer"
            onclick="event.stopPropagation()">${ev.latDisp},${ev.lonDisp}</a>`
       : '—';
-    const trigCol=ev.trigger==='Ccz'?'var(--acc)':ev.trigger==='Ccy'?'var(--orange)':'var(--red)';
+    const trigCol=ev.trigger==='Ccz'?'var(--acc)':ev.trigger==='Ccy'?'var(--orange)':ev.trigger==='Ccx'?'var(--purple)':'var(--red)';
     return `
     <div class="ev-item" style="cursor:${mapsHref?'pointer':'default'}"
          onclick="${mapsHref?`window.open('${mapsHref}','_blank')`:''}">
       <span class="ev-t">${ev.t}</span>
       <span class="ev-d">
         <span style="color:${trigCol};font-weight:700;margin-right:4px">${ev.trigger}</span>
-        Ccz ${ev.ccz} | Ccy ${ev.ccy} | Pct ${ev.pct}% | Pde ${ev.pde}% | ${ev.spd} mph | ${locStr}
+        Ccz ${ev.ccz} | Ccy ${ev.ccy} | Ccx ${ev.ccx} | Pct ${ev.pct}% | Pde ${ev.pde}% | ${ev.spd} mph | ${locStr}
       </span>
       <span class="ev-pk">&#9650;${ev.pk}</span>
     </div>`;
@@ -643,18 +727,19 @@ function renderEvLog(){
 // EN 12299 / comfort.m thresholds:  L20=0.200  L30=0.315  L40=0.400
 // ============================================================
 function updateUI(){
-  const maxCC=Math.max(ccz,ccy);
+  const maxCC=Math.max(ccz,ccy,ccx);
   let cls='good', tl='g', lbl='Comfort';
-  if(maxCC>=0.315){cls='bad';tl='r';lbl='Uncomf.';}
-  else if(maxCC>=0.200){cls='med';tl='a';lbl='Medium';}
+  if(maxCC>=0.4){cls='bad';tl='r';lbl='Uncomf.';}
+  else if(maxCC>=0.315){cls='med';tl='a';lbl='Medium';}
 
   setVBox('numCcz','boxCcz',ccz.toFixed(4),cls);
   setVBox('numCcy','boxCcy',ccy.toFixed(4),cls);
+  setVBox('numCcx','boxCcx',ccx.toFixed(4),cls);
 
-  const pctCls=pct>0.65?'bad':pct>0.30?'med':'good';
-  setVBox('numPct','boxPct',pct.toFixed(4),pctCls);
+  const pctCls=pct>10?'bad':pct>5?'med':'good';
+  setVBox('numPct','boxPct',pct.toFixed(1)+'%',pctCls);
 
-  const pdeCls=pde>10?'bad':pde>3?'med':'good';
+  const pdeCls=pde>10?'bad':pde>5?'med':'good';
   setVBox('numPde','boxPde',pde.toFixed(1)+'%',pdeCls);
 
   document.getElementById('tlR').className='tl-dot tl-r'+(tl==='r'?' on':'');
@@ -664,11 +749,14 @@ function updateUI(){
 
   const mz=sN?(cczSum/sN).toFixed(4):'—';
   const my=sN?(ccySum/sN).toFixed(4):'—';
+  const mx=sN?(ccxSum/sN).toFixed(4):'—';
   document.getElementById('statCcz').textContent=mz+'/'+cczPk.toFixed(4);
   document.getElementById('statCcy').textContent=my+'/'+ccyPk.toFixed(4);
+  document.getElementById('statCcx').textContent=mx+'/'+ccxPk.toFixed(4);
   document.getElementById('barCcz').style.width=Math.min(100,ccz/0.4*100)+'%';
   document.getElementById('barCcy').style.width=Math.min(100,ccy/0.4*100)+'%';
-  document.getElementById('miniPctPk').textContent=pctPk.toFixed(4);
+  document.getElementById('barCcx').style.width=Math.min(100,ccx/0.4*100)+'%';
+  document.getElementById('miniPctPk').textContent=pctPk.toFixed(1)+'%';
   document.getElementById('miniPde').textContent=pdeCount;
   document.getElementById('miniFsVal').textContent=Math.round(fsEst)+' Hz';
   document.getElementById('fsDisplay').textContent='Fs '+Math.round(fsEst)+' Hz';
@@ -685,7 +773,7 @@ function setVBox(nId,bId,val,cls){
 function pushChart(){
   evalWindows++;  // count 1-second windows
   pde=evalWindows>0?(pdeCount/evalWindows*100):0;
-  cht.ccz.push(ccz);cht.ccy.push(ccy);cht.pct.push(pct);
+  cht.ccz.push(ccz);cht.ccy.push(ccy);cht.ccx=cht.ccx||[];cht.ccx.push(ccx);cht.pct.push(pct);
   if(cht.ccz.length>CH_N){cht.ccz.shift();cht.ccy.shift();cht.pct.shift();}
   drawChart();
 }
@@ -827,6 +915,7 @@ function drawChart(){
   }
   line(cht.ccz,'#00d4ff',1.8);
   line(cht.ccy,'#ff6030',1.8);
+  if(cht.ccx&&cht.ccx.length>1)line(cht.ccx,'#b060ff',1.5);
   ctx.font='8px Courier New';ctx.fillStyle='#2a4050';
   ctx.fillText('60s',4,H-3);ctx.fillText('now',W-24,H-3);
 }
