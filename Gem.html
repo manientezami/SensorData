@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MoniRail Web Rider</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <header class="header">
+        <div class="logo">MoniRail</div>
+        <div class="app-title">Web Rider</div>
+    </header>
+
+    <main class="dashboard">
+        <section class="controls">
+            <button id="startStopBtn" class="btn btn-start">Start</button>
+            <button id="logCsvBtn" class="btn btn-secondary" disabled>Log CSV</button>
+        </section>
+
+        <section class="status-grid">
+            <div class="gauge-container">
+                <div id="speedDisplay" class="large-number">00</div>
+                <div class="unit">mph</div>
+                <div class="gnss-info">
+                    GNSS: <span id="gnssStatus">3D</span><br>
+                    Sats: <span id="satCount">--</span>
+                </div>
+            </div>
+
+            <div class="comfort-indicators">
+                <div class="traffic-light vertical">
+                    <div id="light-ccz-red" class="light red"></div>
+                    <div id="light-ccz-amber" class="light amber"></div>
+                    <div id="light-ccz-green" class="light green"></div>
+                    <span class="light-label">Ccz</span>
+                </div>
+                <div class="traffic-light horizontal">
+                    <div id="light-ccy-green" class="light green"></div>
+                    <div id="light-ccy-amber" class="light amber"></div>
+                    <div id="light-ccy-red" class="light red"></div>
+                    <span class="light-label">Ccy</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="motion-section">
+            <h3>Vertical and lateral motion</h3>
+            <canvas id="motionChart"></canvas>
+        </section>
+
+        <div id="map"></div>
+
+        <section class="events-section">
+            <table id="eventTable">
+                <thead>
+                    <tr>
+                        <th>Location</th>
+                        <th>Time</th>
+                        <th>Type</th>
+                        <th>Value</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    </tbody>
+            </table>
+        </section>
+    </main>
+
+    <script src="app.js"></script>
+</body>
+</html>
