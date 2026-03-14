@@ -199,6 +199,18 @@ main{padding:8px;display:flex;flex-direction:column;gap:8px;max-width:560px;marg
     <span class="pill pill-off" id="pilIMU">IMU</span>
     <span class="pill pill-off" id="pilGPS">GPS</span>
     <span class="pill pill-off" id="pilREC">REC</span>
+    <span style="display:flex;align-items:center;gap:3px;padding:0 4px;opacity:0.8" title="Align phone so this arrow points in the train travel direction">
+      <svg width="54" height="14" viewBox="0 0 54 14" style="flex-shrink:0">
+        <defs>
+          <marker id="ah" markerWidth="5" markerHeight="5" refX="4" refY="2.5" orient="auto">
+            <path d="M0,0 L5,2.5 L0,5 Z" fill="#00d4ff"/>
+          </marker>
+        </defs>
+        <line x1="2" y1="7" x2="42" y2="7" stroke="#00d4ff" stroke-width="1.5" marker-end="url(#ah)"/>
+        <text x="46" y="11" font-family="'Aptos Mono','Courier New',monospace" font-size="8" fill="#00d4ff" font-weight="700">X</text>
+      </svg>
+      <span style="font-family:var(--mono);font-size:.46rem;color:var(--muted);letter-spacing:.5px;line-height:1.2;white-space:nowrap">Travel<br>Dir.</span>
+    </span>
     <span style="font-family:var(--mono);font-size:.55rem;color:var(--muted);letter-spacing:1px;padding:2px 4px;align-self:center">ver 1.0</span>
   </div>
 </header>
@@ -633,13 +645,12 @@ function onMotion(e){
   const roll_wp=fWp.tick(gx);  // gx = roll rate rad/s from gyro
   const jerkY=(ay-_ayPrev)*fsEst; _ayPrev=ay;
 
-  // — Pct: EN12299 curve transition formula —
-  if(_pctMayWp) pct=computePct(ay_wp,roll_wp,jerkY,
-    _pctMayWp,_pctMaRoll,_pctMaJerk,_pctMxAY,_pctMxRoll,_pctMxJerk);
-  if(pct>pctPk)pctPk=pct;
+  // — Pct: EN12299 curve transition formula (capped at 100%) —
+  if(_pctMayWp) pct=Math.min(100, computePct(ay_wp,roll_wp,jerkY,
+    _pctMayWp,_pctMaRoll,_pctMaJerk,_pctMxAY,_pctMxRoll,_pctMxJerk));
 
-  // — Pde: EN12299 discrete event formula —
-  if(_pdeMn2) pde=computePde(ay_wp,_pdeMn2,_pdeMx2,_pdeMi2,_pdeMxOut);
+  // — Pde: EN12299 discrete event formula (capped at 100%) —
+  if(_pdeMn2) pde=Math.min(100, computePde(ay_wp,_pdeMn2,_pdeMx2,_pdeMi2,_pdeMxOut));
 
   // — Event detection: Pde>10%, Ccx/Ccz/Ccy>0.4 m/s² —
   const pdeTriggered = pde > PDE_THRESH_PCT;
@@ -654,11 +665,15 @@ function onMotion(e){
     logEvent(ax,ay,az,ay_wd,az_wb,pde,trigger);
   }
 
-  // — Accumulators —
+  // — Accumulators (peaks only recorded after 5 s settle time) —
+  const settled = (Date.now()-startTime) > 5000;
   sN++; cczSum+=ccz; ccySum+=ccy; ccxSum+=ccx;
-  if(ccz>cczPk)cczPk=ccz;
-  if(ccy>ccyPk)ccyPk=ccy;
-  if(ccx>ccxPk)ccxPk=ccx;
+  if(settled){
+    if(pct>pctPk)pctPk=pct;
+    if(ccz>cczPk)cczPk=ccz;
+    if(ccy>ccyPk)ccyPk=ccy;
+    if(ccx>ccxPk)ccxPk=ccx;
+  }
 
   // — CSV —
   if(recording){
