@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SENSOR ARRAY // LIVE TELEMETRY</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #050a0e;
+    --panel: #0b1520;
+    --border: #1a3a4a;
+    --glow: #00e5ff;
+    --glow2: #00ff9d;
+    --warn: #ff6b35;
+    --err: #ff3860;
+    --text: #a8d8e8;
+    --dim: #2a5a6a;
+    --grid: rgba(0,229,255,0.04);
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Share Tech Mono', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  body::before {
+    content:'';
+    position:fixed; inset:0;
+    background-image:
+      linear-gradient(var(--grid) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+    background-size:40px 40px;
+    pointer-events:none; z-index:0;
+  }
+  .scanline {
+    position:fixed; inset:0;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px);
+    pointer-events:none; z-index:999;
+  }
+
+  /* Header */
+  header {
+    position:relative; z-index:1;
+    padding:16px 20px;
+    border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:10px;
+    background:linear-gradient(180deg, rgba(0,229,255,0.05) 0%, transparent 100%);
+  }
+  .logo {
+    font-family:'Orbitron',sans-serif; font-weight:900;
+    font-size:clamp(13px,3vw,20px); letter-spacing:0.15em;
+    color:var(--glow); text-shadow:0 0 20px var(--glow);
+  }
+  .logo span { color:var(--glow2); }
+  .hdr-btns { display:flex; gap:10px; align-items:center; }
+  .btn {
+    font-family:'Orbitron',sans-serif; font-size:11px;
+    letter-spacing:0.12em; padding:9px 20px;
+    background:transparent; cursor:pointer; transition:all .2s;
+    clip-path:polygon(6px 0%,100% 0%,calc(100% - 6px) 100%,0% 100%);
+  }
+  #start-btn { border:1px solid var(--glow); color:var(--glow); }
+  #start-btn:hover { background:rgba(0,229,255,.12); box-shadow:0 0 16px rgba(0,229,255,.3); }
+  #start-btn.rec { border-color:var(--warn); color:var(--warn); animation:pulse 1.2s infinite; }
+  #demo-btn { border:1px solid var(--glow2); color:var(--glow2); }
+  #demo-btn:hover { background:rgba(0,255,157,.1); }
+  #demo-btn.active { background:rgba(0,255,157,.15); }
+
+  /* Debug panel */
+  #debug-panel {
+    position:relative; z-index:1;
+    margin:12px 20px 0;
+    border:1px solid var(--border);
+    background:rgba(5,10,14,.9);
+    font-size:11px; letter-spacing:0.06em;
+  }
+  #debug-panel .dbg-head {
+    padding:6px 12px;
+    border-bottom:1px solid var(--border);
+    font-family:'Orbitron',sans-serif; font-size:9px; letter-spacing:0.2em;
+    color:var(--dim); display:flex; justify-content:space-between; align-items:center;
+  }
+  #debug-log {
+    max-height:110px; overflow-y:auto;
+    padding:6px 12px; display:flex; flex-direction:column; gap:2px;
+  }
+  .dlog { display:flex; gap:10px; }
+  .dlog .ts { color:var(--dim); min-width:80px; }
+  .dlog.ok   .msg { color:var(--glow2); }
+  .dlog.err  .msg { color:var(--err); }
+  .dlog.warn .msg { color:var(--warn); }
+  .dlog.info .msg { color:var(--text); }
+
+  /* Status dots */
+  .status-bar { display:flex; gap:16px; font-size:10px; padding:10px 20px; position:relative; z-index:1; }
+  .dot-row { display:flex; align-items:center; gap:6px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); transition:all .3s; }
+  .dot.ok   { background:var(--glow2); box-shadow:0 0 8px var(--glow2); }
+  .dot.err  { background:var(--err);   box-shadow:0 0 8px var(--err); }
+  .dot.warn { background:var(--warn);  box-shadow:0 0 8px var(--warn); }
+
+  /* Main grid */
+  main {
+    position:relative; z-index:1;
+    padding:12px 20px 16px;
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(290px,1fr));
+    gap:14px; max-width:1400px; margin:0 auto;
+  }
+  .panel {
+    background:var(--panel);
+    border:1px solid var(--border);
+    position:relative; overflow:hidden;
+  }
+  .panel::before {
+    content:''; position:absolute; top:0; left:0; right:0; height:2px;
+    background:linear-gradient(90deg,transparent,var(--glow),transparent); opacity:.6;
+  }
+  .panel.accent::before { background:linear-gradient(90deg,transparent,var(--glow2),transparent); }
+  .panel.warn::before   { background:linear-gradient(90deg,transparent,var(--warn),transparent); }
+  .panel-header {
+    padding:10px 14px; border-bottom:1px solid var(--border);
+    display:flex; align-items:center; justify-content:space-between;
+  }
+  .panel-title {
+    font-family:'Orbitron',sans-serif; font-size:10px;
+    letter-spacing:.2em; color:var(--glow); text-transform:uppercase;
+  }
+  .panel.accent .panel-title { color:var(--glow2); }
+  .panel.warn   .panel-title { color:var(--warn); }
+  .panel-tag { font-size:9px; letter-spacing:.1em; color:var(--dim); }
+
+  .readout-grid {
+    display:grid; grid-template-columns:repeat(3,1fr);
+    gap:1px; background:var(--border);
+  }
+  .readout { background:var(--panel); padding:10px 12px; text-align:center; }
+  .readout-label { font-size:9px; letter-spacing:.15em; color:var(--dim); margin-bottom:3px; }
+  .readout-value {
+    font-family:'Orbitron',sans-serif; font-size:17px; font-weight:700;
+    color:var(--glow); text-shadow:0 0 10px rgba(0,229,255,.4);
+    transition:color .2s;
+  }
+  .panel.accent .readout-value { color:var(--glow2); text-shadow:0 0 10px rgba(0,255,157,.4); }
+  .panel.warn   .readout-value { color:var(--warn);  text-shadow:0 0 10px rgba(255,107,53,.4); }
+  .readout-unit { font-size:9px; color:var(--dim); margin-top:1px; }
+
+  .chart-legend { display:flex; gap:14px; padding:8px 14px 0; font-size:10px; }
+  .legend-item  { display:flex; align-items:center; gap:5px; }
+  .legend-dot   { width:7px; height:7px; border-radius:50%; }
+  .chart-wrap   { padding:6px 10px 10px; }
+  canvas        { display:block; width:100%; }
+
+  .orient-visual {
+    padding:14px; display:flex; justify-content:center;
+    align-items:center; gap:28px; flex-wrap:wrap;
+  }
+  .phone-3d {
+    width:52px; height:92px;
+    border:2px solid var(--warn); border-radius:9px;
+    position:relative; transform-style:preserve-3d;
+    transition:transform .1s linear;
+    box-shadow:0 0 18px rgba(255,107,53,.2);
+  }
+  .phone-3d::before {
+    content:''; position:absolute; inset:4px;
+    border:1px solid rgba(255,107,53,.2); border-radius:6px;
+  }
+  .compass {
+    width:86px; height:86px; border:2px solid var(--warn); border-radius:50%;
+    position:relative; box-shadow:0 0 18px rgba(255,107,53,.2);
+  }
+  .compass-needle {
+    position:absolute; top:50%; left:50%;
+    width:2px; height:34px;
+    background:linear-gradient(180deg,var(--warn) 50%,var(--dim) 50%);
+    transform-origin:bottom center;
+    transform:translate(-50%,-100%) rotate(0deg);
+    transition:transform .15s linear;
+  }
+  .compass-label { position:absolute; font-size:9px; font-family:'Orbitron',sans-serif; color:var(--dim); }
+  .compass-label.n { top:4px;    left:50%; transform:translateX(-50%); }
+  .compass-label.s { bottom:4px; left:50%; transform:translateX(-50%); }
+  .compass-label.e { right:5px;  top:50%;  transform:translateY(-50%); }
+  .compass-label.w { left:5px;   top:50%;  transform:translateY(-50%); }
+
+  .full-width { grid-column:1 / -1; }
+  .ticker {
+    padding:5px 14px; font-size:10px; color:var(--dim);
+    border-top:1px solid var(--border); letter-spacing:.05em;
+    white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+
+  footer {
+    position:relative; z-index:1;
+    padding:10px 20px; border-top:1px solid var(--border);
+    display:flex; justify-content:space-between; align-items:center;
+    font-size:10px; color:var(--dim); letter-spacing:.1em; flex-wrap:wrap; gap:8px;
+  }
+  #export-btn {
+    font-family:'Share Tech Mono',monospace; font-size:11px;
+    padding:7px 16px; background:transparent;
+    border:1px solid var(--dim); color:var(--dim); cursor:pointer;
+    letter-spacing:.1em; transition:all .2s;
+  }
+  #export-btn:hover { border-color:var(--glow2); color:var(--glow2); }
+
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @media(max-width:600px) { header{flex-wrap:wrap;gap:10px;} main{padding:10px;gap:10px;} }
+</style>
+</head>
+<body>
+<div class="scanline"></div>
+
+<header>
+  <div class="logo">SENSOR<span>ARRAY</span> <span style="font-size:.55em;opacity:.5">// LIVE TELEMETRY</span></div>
+  <div class="hdr-btns">
+    <button class="btn" id="demo-btn">⚡ DEMO</button>
+    <button class="btn" id="start-btn">▶ START</button>
+  </div>
+</header>
+
+<div id="debug-panel">
+  <div class="dbg-head">
+    <span>SYSTEM DIAGNOSTIC</span>
+    <span id="proto-label" style="color:var(--warn)">PROTOCOL: —</span>
+  </div>
+  <div id="debug-log"></div>
+</div>
+
+<div class="status-bar">
+  <div class="dot-row"><div class="dot" id="dot-accel"></div> <span>ACCEL</span></div>
+  <div class="dot-row"><div class="dot" id="dot-gyro"></div>  <span>GYRO</span></div>
+  <div class="dot-row"><div class="dot" id="dot-orient"></div><span>ORIENT</span></div>
+  <div class="dot-row"><div class="dot" id="dot-geo"></div>   <span>GPS</span></div>
+</div>
+
+<main>
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">ACCELEROMETER</span>
+      <span class="panel-tag">m/s²</span>
+    </div>
+    <div class="readout-grid">
+      <div class="readout"><div class="readout-label">X</div><div class="readout-value" id="ax">—</div><div class="readout-unit">m/s²</div></div>
+      <div class="readout"><div class="readout-label">Y</div><div class="readout-value" id="ay">—</div><div class="readout-unit">m/s²</div></div>
+      <div class="readout"><div class="readout-label">Z</div><div class="readout-value" id="az">—</div><div class="readout-unit">m/s²</div></div>
+    </div>
+    <div class="chart-legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#00e5ff"></span>X</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#00ff9d"></span>Y</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#ff6b35"></span>Z</span>
+    </div>
+    <div class="chart-wrap"><canvas id="accel-canvas" height="90"></canvas></div>
+    <div class="ticker" id="accel-ticker">AWAITING…</div>
+  </div>
+
+  <div class="panel accent">
+    <div class="panel-header">
+      <span class="panel-title">GYROSCOPE</span>
+      <span class="panel-tag">°/s</span>
+    </div>
+    <div class="readout-grid">
+      <div class="readout"><div class="readout-label">ALPHA</div><div class="readout-value" id="gx">—</div><div class="readout-unit">°/s</div></div>
+      <div class="readout"><div class="readout-label">BETA</div> <div class="readout-value" id="gy">—</div><div class="readout-unit">°/s</div></div>
+      <div class="readout"><div class="readout-label">GAMMA</div><div class="readout-value" id="gz">—</div><div class="readout-unit">°/s</div></div>
+    </div>
+    <div class="chart-legend">
+      <span class="legend-item"><span class="legend-dot" style="background:#00e5ff"></span>α</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#00ff9d"></span>β</span>
+      <span class="legend-item"><span class="legend-dot" style="background:#ff6b35"></span>γ</span>
+    </div>
+    <div class="chart-wrap"><canvas id="gyro-canvas" height="90"></canvas></div>
+    <div class="ticker" id="gyro-ticker">AWAITING…</div>
+  </div>
+
+  <div class="panel warn">
+    <div class="panel-header">
+      <span class="panel-title">ORIENTATION</span>
+      <span class="panel-tag">DEVICE ATTITUDE</span>
+    </div>
+    <div class="orient-visual">
+      <div>
+        <div style="font-size:9px;letter-spacing:.15em;color:var(--dim);margin-bottom:6px;text-align:center">3D ATTITUDE</div>
+        <div class="phone-3d" id="phone-visual"></div>
+      </div>
+      <div>
+        <div style="font-size:9px;letter-spacing:.15em;color:var(--dim);margin-bottom:6px;text-align:center">HEADING</div>
+        <div class="compass">
+          <span class="compass-label n">N</span><span class="compass-label s">S</span>
+          <span class="compass-label e">E</span><span class="compass-label w">W</span>
+          <div class="compass-needle" id="compass-needle"></div>
+        </div>
+      </div>
+      <div style="display:grid;gap:6px;">
+        <div class="readout" style="border:1px solid var(--border)"><div class="readout-label">YAW (α)</div><div class="readout-value" id="oa">—</div><div class="readout-unit">°</div></div>
+        <div class="readout" style="border:1px solid var(--border)"><div class="readout-label">PITCH (β)</div><div class="readout-value" id="ob">—</div><div class="readout-unit">°</div></div>
+        <div class="readout" style="border:1px solid var(--border)"><div class="readout-label">ROLL (γ)</div><div class="readout-value" id="og">—</div><div class="readout-unit">°</div></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="panel full-width">
+    <div class="panel-header">
+      <span class="panel-title" style="color:var(--glow2)">GEOLOCATION</span>
+      <span class="panel-tag">GPS / NETWORK</span>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:1px;background:var(--border)">
+      <div class="readout"><div class="readout-label">LATITUDE</div> <div class="readout-value" id="g-lat" style="color:var(--glow2);font-size:13px">—</div><div class="readout-unit">°</div></div>
+      <div class="readout"><div class="readout-label">LONGITUDE</div><div class="readout-value" id="g-lon" style="color:var(--glow2);font-size:13px">—</div><div class="readout-unit">°</div></div>
+      <div class="readout"><div class="readout-label">ALTITUDE</div> <div class="readout-value" id="g-alt" style="color:var(--glow2)">—</div><div class="readout-unit">m</div></div>
+      <div class="readout"><div class="readout-label">SPEED</div>    <div class="readout-value" id="g-spd" style="color:var(--glow2)">—</div><div class="readout-unit">m/s</div></div>
+      <div class="readout"><div class="readout-label">ACCURACY</div> <div class="readout-value" id="g-acc" style="color:var(--glow2)">—</div><div class="readout-unit">±m</div></div>
+      <div class="readout"><div class="readout-label">HEADING</div>  <div class="readout-value" id="g-hdg" style="color:var(--glow2)">—</div><div class="readout-unit">°</div></div>
+    </div>
+    <div class="ticker" id="geo-ticker">AWAITING GPS FIX…</div>
+  </div>
+</main>
+
+<footer>
+  <span id="frame-count">SAMPLES: 0</span>
+  <button id="export-btn">⬇ EXPORT CSV</button>
+  <span id="clock">--:--:--</span>
+</footer>
+
+<script>
+// ── Logging ────────────────────────────────────────────────
+const logEl = document.getElementById('debug-log');
+function dbg(msg, type='info') {
+  const row = document.createElement('div');
+  row.className = `dlog ${type}`;
+  const ts = new Date().toTimeString().slice(0,8);
+  row.innerHTML = `<span class="ts">${ts}</span><span class="msg">${msg}</span>`;
+  logEl.prepend(row);
+  if (logEl.children.length > 30) logEl.removeChild(logEl.lastChild);
+}
+
+// Protocol check
+const proto = location.protocol;
+document.getElementById('proto-label').textContent = `PROTOCOL: ${proto}`;
+if (proto === 'https:') {
+  document.getElementById('proto-label').style.color = 'var(--glow2)';
+  dbg('HTTPS — sensor APIs available', 'ok');
+} else if (proto === 'file:') {
+  document.getElementById('proto-label').style.color = 'var(--err)';
+  dbg('FILE:// — sensors BLOCKED. Host on HTTPS or use ⚡ DEMO mode.', 'err');
+} else {
+  dbg(`HTTP — motion sensors may be blocked on some devices`, 'warn');
+}
+
+if (typeof DeviceMotionEvent === 'undefined') {
+  dbg('DeviceMotionEvent: NOT in this browser', 'warn');
+} else {
+  dbg('DeviceMotionEvent: present' + (typeof DeviceMotionEvent.requestPermission === 'function' ? ' (iOS — needs permission)' : ''), 'info');
+}
+if (!navigator.geolocation) dbg('Geolocation: NOT available', 'warn');
+else dbg('Geolocation: present', 'info');
+
+// ── Chart data ─────────────────────────────────────────────
+const MAX = 120;
+const accelBuf = { x:[], y:[], z:[] };
+const gyroBuf  = { x:[], y:[], z:[] };
+let sampleCount = 0, dataLog = [], demoTimer = null, recording = false, demoMode = false;
+
+function push(arr, v) { arr.push(v); if (arr.length > MAX) arr.shift(); }
+function fmt(v, d=2)  { return (v == null) ? '—' : (+v).toFixed(d); }
+
+// Canvas drawing
+function resizeCanvas(c) {
+  const w = c.parentElement.clientWidth - 20;
+  if (c.width !== w) { c.width = w; c.height = 90; }
+}
+function drawChart(ctx, W, H, datasets, colors, yRange) {
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = 'rgba(0,229,255,0.06)'; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) {
+    const y = H/4*i;
+    ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(W,y); ctx.stroke();
+  }
+  ctx.strokeStyle = 'rgba(0,229,255,0.18)'; ctx.setLineDash([4,4]);
+  ctx.beginPath(); ctx.moveTo(0, H/2); ctx.lineTo(W, H/2); ctx.stroke();
+  ctx.setLineDash([]);
+  datasets.forEach((data, i) => {
+    if (data.length < 2) return;
+    ctx.beginPath(); ctx.strokeStyle = colors[i]; ctx.lineWidth = 1.5;
+    ctx.shadowColor = colors[i]; ctx.shadowBlur = 4;
+    data.forEach((v, idx) => {
+      const x = idx / (MAX - 1) * W;
+      const y = H/2 - (v / yRange) * (H/2);
+      idx === 0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.stroke(); ctx.shadowBlur = 0;
+  });
+}
+
+const accelCanvas = document.getElementById('accel-canvas');
+const gyroCanvas  = document.getElementById('gyro-canvas');
+const accelCtx    = accelCanvas.getContext('2d');
+const gyroCtx     = gyroCanvas.getContext('2d');
+
+function renderLoop() {
+  resizeCanvas(accelCanvas); resizeCanvas(gyroCanvas);
+  drawChart(accelCtx, accelCanvas.width, 90, [accelBuf.x, accelBuf.y, accelBuf.z], ['#00e5ff','#00ff9d','#ff6b35'], 20);
+  drawChart(gyroCtx,  gyroCanvas.width,  90, [gyroBuf.x,  gyroBuf.y,  gyroBuf.z],  ['#00e5ff','#00ff9d','#ff6b35'], 360);
+  document.getElementById('frame-count').textContent = `SAMPLES: ${sampleCount}`;
+  requestAnimationFrame(renderLoop);
+}
+renderLoop();
+
+// ── UI helpers ─────────────────────────────────────────────
+function setAccel(ax, ay, az) {
+  push(accelBuf.x,ax); push(accelBuf.y,ay); push(accelBuf.z,az);
+  document.getElementById('ax').textContent = fmt(ax);
+  document.getElementById('ay').textContent = fmt(ay);
+  document.getElementById('az').textContent = fmt(az);
+  document.getElementById('accel-ticker').textContent = `X:${fmt(ax)}  Y:${fmt(ay)}  Z:${fmt(az)}`;
+  document.getElementById('dot-accel').className = 'dot ok';
+  sampleCount++;
+}
+function setGyro(gx, gy, gz) {
+  push(gyroBuf.x,gx); push(gyroBuf.y,gy); push(gyroBuf.z,gz);
+  document.getElementById('gx').textContent = fmt(gx);
+  document.getElementById('gy').textContent = fmt(gy);
+  document.getElementById('gz').textContent = fmt(gz);
+  document.getElementById('gyro-ticker').textContent = `α:${fmt(gx)}  β:${fmt(gy)}  γ:${fmt(gz)}`;
+  document.getElementById('dot-gyro').className = 'dot ok';
+}
+function setOrient(a, b, g) {
+  document.getElementById('oa').textContent = fmt(a,1);
+  document.getElementById('ob').textContent = fmt(b,1);
+  document.getElementById('og').textContent = fmt(g,1);
+  document.getElementById('dot-orient').className = 'dot ok';
+  document.getElementById('phone-visual').style.transform =
+    `rotateX(${-b}deg) rotateZ(${g}deg) rotateY(${a/4}deg)`;
+  document.getElementById('compass-needle').style.transform =
+    `translate(-50%,-100%) rotate(${a}deg)`;
+}
+function setGeo(lat, lon, alt, spd, acc, hdg) {
+  document.getElementById('g-lat').textContent = fmt(lat,5);
+  document.getElementById('g-lon').textContent = fmt(lon,5);
+  document.getElementById('g-alt').textContent = alt != null ? fmt(alt,1) : 'N/A';
+  document.getElementById('g-spd').textContent = spd != null ? fmt(spd,2) : 'N/A';
+  document.getElementById('g-acc').textContent = fmt(acc,1);
+  document.getElementById('g-hdg').textContent = hdg != null ? fmt(hdg,1) : 'N/A';
+  document.getElementById('geo-ticker').textContent = `LAT:${fmt(lat,5)}  LON:${fmt(lon,5)}  ACC:±${fmt(acc,1)}m`;
+  document.getElementById('dot-geo').className = 'dot ok';
+}
+
+// ── Real sensor handlers ───────────────────────────────────
+function onMotion(e) {
+  const src = e.accelerationIncludingGravity || e.acceleration;
+  if (!src || (src.x == null && src.y == null && src.z == null)) {
+    dbg('devicemotion: event fired but values are null (browser may be blocking)', 'warn');
+    return;
+  }
+  const ax = src.x || 0, ay = src.y || 0, az = src.z || 0;
+  setAccel(ax, ay, az);
+  const rr = e.rotationRate;
+  if (rr && rr.alpha != null) setGyro(rr.alpha, rr.beta, rr.gamma);
+  dataLog.push({ t:Date.now(), type:'accel', x:ax, y:ay, z:az });
+}
+function onOrient(e) {
+  if (e.alpha == null) { dbg('orientation: alpha is null', 'warn'); return; }
+  setOrient(e.alpha, e.beta, e.gamma);
+  dataLog.push({ t:Date.now(), type:'orient', alpha:e.alpha, beta:e.beta, gamma:e.gamma });
+}
+
+let motionAttached = false, orientAttached = false, geoWatchId = null;
+
+function attachSensors() {
+  if (!motionAttached) {
+    window.addEventListener('devicemotion', onMotion);
+    motionAttached = true;
+    dbg('devicemotion listener attached — move device to see data', 'info');
+  }
+  if (!orientAttached) {
+    window.addEventListener('deviceorientation', onOrient);
+    orientAttached = true;
+    dbg('deviceorientation listener attached', 'info');
+  }
+  if (navigator.geolocation && geoWatchId == null) {
+    geoWatchId = navigator.geolocation.watchPosition(
+      pos => {
+        const c = pos.coords;
+        setGeo(c.latitude, c.longitude, c.altitude, c.speed, c.accuracy, c.heading);
+        dataLog.push({ t:Date.now(), type:'geo', lat:c.latitude, lon:c.longitude, alt:c.altitude, spd:c.speed });
+        dbg('GPS fix acquired', 'ok');
+      },
+      err => {
+        const msgs = ['','Permission denied','Position unavailable','Timeout'];
+        dbg(`GPS error: ${msgs[err.code]||err.message}`, 'err');
+        document.getElementById('dot-geo').className = 'dot err';
+        document.getElementById('geo-ticker').textContent = `GPS ERROR: ${msgs[err.code]||err.message}`;
+      },
+      { enableHighAccuracy:true, timeout:15000, maximumAge:0 }
+    );
+    dbg('Geolocation watch started', 'info');
+  }
+}
+function detachSensors() {
+  window.removeEventListener('devicemotion', onMotion);
+  window.removeEventListener('deviceorientation', onOrient);
+  motionAttached = false; orientAttached = false;
+  if (geoWatchId != null) { navigator.geolocation.clearWatch(geoWatchId); geoWatchId = null; }
+}
+
+// ── Start / Stop ───────────────────────────────────────────
+document.getElementById('start-btn').addEventListener('click', async () => {
+  if (recording) {
+    detachSensors(); recording = false;
+    document.getElementById('start-btn').textContent = '▶ START';
+    document.getElementById('start-btn').classList.remove('rec');
+    dbg('Recording stopped', 'warn');
+    return;
+  }
+
+  // iOS permission
+  if (typeof DeviceMotionEvent !== 'undefined' &&
+      typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      dbg('Requesting iOS motion permission…', 'info');
+      const res = await DeviceMotionEvent.requestPermission();
+      if (res !== 'granted') {
+        dbg('Motion permission DENIED', 'err');
+        document.getElementById('dot-accel').className = 'dot err';
+        document.getElementById('dot-gyro').className  = 'dot err';
+        return;
+      }
+      dbg('Motion permission GRANTED', 'ok');
+    } catch(e) { dbg(`Permission error: ${e}`, 'err'); return; }
+  }
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try { await DeviceOrientationEvent.requestPermission(); } catch(e) {}
+  }
+
+  attachSensors(); recording = true;
+  document.getElementById('start-btn').textContent = '■ STOP';
+  document.getElementById('start-btn').classList.add('rec');
+  dbg('Recording started — move your device', 'ok');
+
+  setTimeout(() => {
+    if (sampleCount === 0 && recording && !demoMode)
+      dbg('No data after 3s — try ⚡ DEMO or check HTTPS + browser permissions', 'warn');
+  }, 3000);
+});
+
+// ── Demo mode ──────────────────────────────────────────────
+let demoT = 0;
+function demoTick() {
+  demoT += 0.08;
+  setAccel(
+    Math.sin(demoT*1.3)*8 + Math.sin(demoT*3.1)*2,
+    Math.cos(demoT*0.9)*6 + Math.cos(demoT*2.5)*1.5,
+    9.81 + Math.sin(demoT*0.5)*1.2
+  );
+  setGyro(
+    Math.sin(demoT*0.7)*45,
+    Math.cos(demoT*1.1)*30,
+    Math.sin(demoT*1.7)*20
+  );
+  setOrient(
+    (demoT*30) % 360,
+    Math.sin(demoT*0.6)*30,
+    Math.cos(demoT*0.8)*20
+  );
+  if (demoT < 0.09) setGeo(52.4552, -1.9304, 140, 0, 5, 0);
+}
+
+document.getElementById('demo-btn').addEventListener('click', () => {
+  if (demoMode) {
+    clearInterval(demoTimer); demoTimer = null; demoMode = false;
+    document.getElementById('demo-btn').textContent = '⚡ DEMO';
+    document.getElementById('demo-btn').classList.remove('active');
+    dbg('Demo stopped', 'warn');
+  } else {
+    demoMode = true; demoT = 0;
+    demoTimer = setInterval(demoTick, 50);
+    document.getElementById('demo-btn').textContent = '■ STOP DEMO';
+    document.getElementById('demo-btn').classList.add('active');
+    dbg('Demo mode running — simulated sensor data at 20 Hz', 'ok');
+  }
+});
+
+// ── Export CSV ─────────────────────────────────────────────
+document.getElementById('export-btn').addEventListener('click', () => {
+  if (!dataLog.length) { alert('No data logged yet.'); return; }
+  const hdr = 'timestamp,type,a,b,c\n';
+  const rows = dataLog.map(r => {
+    if (r.type === 'accel')  return `${r.t},accel,${r.x},${r.y},${r.z}`;
+    if (r.type === 'orient') return `${r.t},orient,${r.alpha},${r.beta},${r.gamma}`;
+    if (r.type === 'geo')    return `${r.t},geo,${r.lat},${r.lon},${r.alt??''}`;
+  }).filter(Boolean).join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([hdr+rows], {type:'text/csv'}));
+  a.download = `sensors_${Date.now()}.csv`; a.click();
+});
+
+setInterval(() => {
+  document.getElementById('clock').textContent = new Date().toTimeString().slice(0,8);
+}, 500);
+
+dbg('Dashboard ready — tap ▶ START for real sensors or ⚡ DEMO to preview', 'ok');
+</script>
+</body>
+</html>

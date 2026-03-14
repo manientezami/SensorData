@@ -1,0 +1,1510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>MoniRail – EN 12299 Ride Quality</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@400;600;700;800&family=Barlow:wght@400;500;600&display=swap');
+
+:root {
+  --bg:     #06090f;
+  --bg2:    #0b1018;
+  --bg3:    #101620;
+  --bg4:    #141d2a;
+  --border: #192535;
+  --border2:#223040;
+  --acc:    #00d4ff;
+  --acc2:   #0050c8;
+  --acc3:   #00a8e8;
+  --green:  #00e87a;
+  --amber:  #ffb020;
+  --red:    #ff3b3b;
+  --purple: #b060ff;
+  --orange: #ff6030;
+  --text:   #c8daf0;
+  --muted:  #4a6880;
+  --mono:   'Share Tech Mono', monospace;
+  --head:   'Barlow Condensed', sans-serif;
+  --body:   'Barlow', sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { background: var(--bg); }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--body);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ─── SCANLINES OVERLAY ──────────────────────── */
+body::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0,212,255,0.015) 2px,
+    rgba(0,212,255,0.015) 4px
+  );
+  pointer-events: none;
+  z-index: 9999;
+}
+
+/* ─── PERMISSION OVERLAY ─────────────────────── */
+#permOverlay {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(ellipse at 50% 40%, #0a1828 0%, var(--bg) 70%);
+  z-index: 5000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 24px;
+  text-align: center;
+}
+
+.perm-logo { margin-bottom: 24px; }
+
+.perm-brand {
+  font-family: var(--head);
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: 6px;
+  background: linear-gradient(90deg, var(--acc2), var(--acc), #60f0ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.perm-tagline {
+  font-family: var(--mono);
+  font-size: 0.65rem;
+  color: var(--muted);
+  letter-spacing: 3px;
+  margin-top: 4px;
+  margin-bottom: 28px;
+}
+
+.perm-title {
+  font-family: var(--head);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--acc);
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+}
+
+.perm-desc {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.65;
+  max-width: 320px;
+  margin-bottom: 28px;
+}
+
+.btn-perm {
+  background: linear-gradient(135deg, var(--acc2) 0%, var(--acc) 100%);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 14px 40px;
+  font-family: var(--head);
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 3px;
+  cursor: pointer;
+  box-shadow: 0 0 40px rgba(0,212,255,0.25), 0 0 80px rgba(0,212,255,0.1);
+  transition: all 0.2s;
+}
+.btn-perm:active { transform: scale(0.97); }
+
+.perm-note {
+  margin-top: 18px;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: #1e3040;
+  letter-spacing: 1.5px;
+  line-height: 1.8;
+}
+
+/* Rail track decoration */
+.rail-track {
+  width: 260px;
+  height: 18px;
+  position: relative;
+  margin: 18px auto;
+}
+.rail-track::before, .rail-track::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 100%;
+  border-radius: 2px;
+}
+.rail-track::before {
+  top: 2px; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--border2), var(--border2), transparent);
+}
+.rail-track::after {
+  top: 13px; height: 3px;
+  background: linear-gradient(90deg, transparent, var(--border2), var(--border2), transparent);
+}
+.rail-sleepers {
+  display: flex;
+  justify-content: space-evenly;
+  align-items: stretch;
+  height: 100%;
+  padding: 0 10px;
+}
+.sleeper {
+  width: 4px;
+  background: var(--border);
+  border-radius: 1px;
+}
+
+/* ─── HEADER ─────────────────────────────────── */
+header {
+  background: linear-gradient(180deg, #0c1422 0%, var(--bg2) 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  position: sticky;
+  top: 0;
+  z-index: 200;
+  box-shadow: 0 2px 20px rgba(0,0,0,0.6);
+}
+
+.h-logo {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.h-brand {
+  display: flex;
+  flex-direction: column;
+}
+
+.h-name {
+  font-family: var(--head);
+  font-size: 1.35rem;
+  font-weight: 800;
+  letter-spacing: 4px;
+  background: linear-gradient(90deg, var(--acc2), var(--acc));
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  line-height: 1;
+}
+
+.h-sub {
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-top: 1px;
+}
+
+.h-pills {
+  display: flex;
+  gap: 5px;
+  align-items: center;
+}
+
+.pill {
+  padding: 2px 7px;
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 1px;
+  border: 1px solid;
+  transition: all 0.3s;
+}
+.pill-off { border-color: #1a2535; color: #2a3545; background: transparent; }
+.pill-on  { border-color: var(--acc); color: var(--acc); background: rgba(0,212,255,0.08); animation: pill-pulse 2s ease-in-out infinite; }
+.pill-rec { border-color: var(--red); color: var(--red); background: rgba(255,59,59,0.08); animation: pill-pulse 0.8s ease-in-out infinite; }
+
+@keyframes pill-pulse {
+  0%,100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+/* ─── MAIN LAYOUT ────────────────────────────── */
+main {
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding-bottom: 24px;
+}
+
+/* ─── CARDS ──────────────────────────────────── */
+.card {
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(0,212,255,0.2), transparent);
+}
+
+.card-hdr {
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  letter-spacing: 2.5px;
+  color: var(--muted);
+  margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.card-hdr-accent { color: var(--acc); }
+
+/* ─── TOP ROW: SPEED + VALUES + COMFORT ──────── */
+.top-row {
+  display: grid;
+  grid-template-columns: 90px 1fr 50px;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Speed gauge */
+#speedWrap { text-align: center; }
+#speedCanvas { display: block; margin: 0 auto; }
+.speed-lbl {
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  color: var(--muted);
+  letter-spacing: 2px;
+  margin-top: 2px;
+}
+
+/* Value boxes */
+.val-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px;
+}
+
+.vbox {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 6px 8px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.vbox::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  transition: background 0.5s;
+}
+
+.vbox.good::after  { background: var(--green); }
+.vbox.med::after   { background: var(--amber); }
+.vbox.bad::after   { background: var(--red); }
+
+.vlbl {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 2px;
+  color: var(--muted);
+  margin-bottom: 3px;
+}
+
+.vnum {
+  font-family: var(--mono);
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--acc);
+  line-height: 1;
+  transition: color 0.5s;
+}
+
+.vnum.nmv { font-size: 1.6rem; }
+.vnum.good { color: var(--green); }
+.vnum.med  { color: var(--amber); }
+.vnum.bad  { color: var(--red); }
+
+.vunit {
+  font-family: var(--mono);
+  font-size: 0.48rem;
+  color: #2a4050;
+  margin-top: 2px;
+}
+
+/* Traffic light */
+.tlight-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.tlight {
+  width: 34px;
+  background: #060c14;
+  border: 1px solid #1a2535;
+  border-radius: 18px;
+  padding: 5px 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  box-shadow: inset 0 0 10px rgba(0,0,0,0.8);
+}
+
+.tl-dot {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  transition: all 0.6s ease;
+  position: relative;
+}
+
+.tl-r  { background: #1f0808; }
+.tl-a  { background: #1f1408; }
+.tl-g  { background: #081f10; }
+
+.tl-r.on  { background: var(--red);   box-shadow: 0 0 10px var(--red),   0 0 30px rgba(255,59,59,0.4); }
+.tl-a.on  { background: var(--amber); box-shadow: 0 0 10px var(--amber), 0 0 30px rgba(255,176,32,0.4); }
+.tl-g.on  { background: var(--green); box-shadow: 0 0 10px var(--green), 0 0 30px rgba(0,232,122,0.4); }
+
+.tl-label {
+  font-family: var(--mono);
+  font-size: 0.48rem;
+  color: var(--muted);
+  letter-spacing: 1px;
+  text-align: center;
+  line-height: 1.3;
+}
+
+/* ─── STATS ROW ──────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.stat-block { }
+
+.stat-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.7rem;
+  padding: 3px 0;
+}
+
+.stat-key { color: var(--muted); font-family: var(--mono); font-size: 0.62rem; }
+.stat-val { color: var(--text); font-family: var(--mono); font-size: 0.72rem; font-weight: 600; }
+
+.bar-track {
+  height: 4px;
+  background: var(--bg4);
+  border-radius: 2px;
+  margin-top: 4px;
+  overflow: hidden;
+}
+.bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.8s ease;
+}
+.bar-green { background: linear-gradient(90deg, var(--green), var(--acc)); }
+.bar-red   { background: linear-gradient(90deg, var(--amber), var(--red)); }
+
+.gyro-row {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin-top: 6px;
+}
+
+.gyro-box {
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 5px 6px;
+  text-align: center;
+}
+
+.gyro-lbl { font-family: var(--mono); font-size: 0.5rem; color: var(--muted); letter-spacing: 1px; }
+.gyro-val { font-family: var(--mono); font-size: 0.78rem; color: var(--text); font-weight: 600; margin-top: 2px; }
+
+/* ─── CHARTS ─────────────────────────────────── */
+.legend {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.leg-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--mono);
+  font-size: 0.58rem;
+  color: var(--muted);
+}
+.leg-line { width: 14px; height: 2px; border-radius: 1px; }
+
+#chartCanvas { display: block; width: 100%; border-radius: 4px; }
+
+/* ─── MAP ────────────────────────────────────── */
+#map {
+  height: 210px;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.gps-row {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  color: var(--muted);
+}
+.gps-val { color: var(--acc3); }
+
+/* ─── EVENT LOG ──────────────────────────────── */
+.evlog {
+  max-height: 160px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 0.62rem;
+}
+.evlog::-webkit-scrollbar { width: 3px; }
+.evlog::-webkit-scrollbar-track { background: var(--bg3); }
+.evlog::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.ev-item {
+  display: grid;
+  grid-template-columns: 70px 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.2s;
+}
+.ev-item:hover { background: var(--bg3); }
+.ev-time  { color: var(--acc3); }
+.ev-desc  { color: var(--text); font-size: 0.6rem; }
+.ev-nmv   { color: var(--red); font-weight: 700; }
+
+.evlog-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 20px;
+  font-size: 0.7rem;
+  font-family: var(--mono);
+}
+
+/* ─── CONTROLS ───────────────────────────────── */
+.ctrl-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 7px;
+}
+
+.btn {
+  padding: 11px 6px;
+  border: 1px solid;
+  border-radius: 6px;
+  font-family: var(--head);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  transition: all 0.15s;
+  background: transparent;
+}
+
+.btn:active { transform: scale(0.96); }
+
+.btn-start {
+  border-color: var(--acc);
+  color: var(--acc);
+}
+.btn-start:hover { background: rgba(0,212,255,0.06); }
+.btn-start.running { border-color: var(--red); color: var(--red); }
+
+.btn-rec {
+  border-color: var(--red);
+  color: var(--red);
+}
+.btn-rec:hover { background: rgba(255,59,59,0.06); }
+.btn-rec.active { background: rgba(255,59,59,0.1); animation: rec-pulse 0.8s ease-in-out infinite; }
+
+@keyframes rec-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+
+.btn-csv {
+  border-color: var(--green);
+  color: var(--green);
+}
+.btn-csv:hover { background: rgba(0,232,122,0.06); }
+
+.footer {
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.52rem;
+  color: #1a2535;
+  letter-spacing: 2px;
+  padding: 4px 0 10px;
+}
+
+/* ─── UTILITY ────────────────────────────────── */
+.hidden { display: none !important; }
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════
+     PERMISSION OVERLAY
+════════════════════════════════════════ -->
+<div id="permOverlay">
+  <div class="perm-logo">
+    <svg width="140" height="100" viewBox="0 0 140 100">
+      <defs>
+        <linearGradient id="lg" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#0050c8"/>
+          <stop offset="100%" stop-color="#00d4ff"/>
+        </linearGradient>
+        <filter id="glow">
+          <feGaussianBlur stdDeviation="2" result="blur"/>
+          <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <!-- Sleepers -->
+      <rect x="12" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <rect x="25" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <rect x="38" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <rect x="51" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <rect x="64" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <rect x="77" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <rect x="90" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <rect x="103" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <rect x="116" y="68" width="5" height="24" rx="1.5" fill="#0d1d2e"/>
+      <!-- Rails -->
+      <rect x="8"  y="66" width="124" height="5" rx="2" fill="#1a3a5a"/>
+      <rect x="8"  y="81" width="124" height="5" rx="2" fill="#1a3a5a"/>
+      <!-- M mark -->
+      <polyline points="18,60 18,12 44,42 70,12 70,60"
+        fill="none" stroke="url(#lg)" stroke-width="6"
+        stroke-linecap="round" stroke-linejoin="round"
+        filter="url(#glow)"/>
+      <!-- Sensor pulses -->
+      <circle cx="95" cy="28" r="5" fill="#00d4ff" opacity="0.9" filter="url(#glow)">
+        <animate attributeName="r" values="5;8;5" dur="2s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.9;0.3;0.9" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="112" cy="18" r="3.5" fill="#0050c8" opacity="0.8">
+        <animate attributeName="r" values="3.5;6;3.5" dur="2.7s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.8;0.2;0.8" dur="2.7s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="104" cy="45" r="3" fill="#00d4ff" opacity="0.7">
+        <animate attributeName="r" values="3;5;3" dur="1.8s" repeatCount="indefinite"/>
+        <animate attributeName="opacity" values="0.7;0.2;0.7" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
+    </svg>
+  </div>
+
+  <div class="perm-brand">MoniRail</div>
+  <div class="perm-tagline">EN 12299 · RIDE QUALITY MONITOR</div>
+
+  <div class="rail-track">
+    <div class="rail-sleepers">
+      <div class="sleeper"></div><div class="sleeper"></div>
+      <div class="sleeper"></div><div class="sleeper"></div>
+      <div class="sleeper"></div><div class="sleeper"></div>
+      <div class="sleeper"></div><div class="sleeper"></div>
+    </div>
+  </div>
+
+  <div class="perm-title">Sensor Access Required</div>
+  <p class="perm-desc">
+    MoniRail needs access to your device motion sensors (accelerometer &amp; gyroscope) and GPS to compute EN&nbsp;12299 ride quality indices including <strong style="color:var(--acc)">Ccz, Ccy, NMV, Pct</strong> and <strong style="color:var(--acc)">Pde</strong>.
+  </p>
+  <button class="btn-perm" onclick="requestPermissions()">▶ &nbsp;ENABLE SENSORS</button>
+  <div class="perm-note">
+    Accelerometer · Gyroscope · GPS<br>
+    All data processed on-device · No data transmitted
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     HEADER
+════════════════════════════════════════ -->
+<header>
+  <div class="h-logo">
+    <svg width="38" height="32" viewBox="0 0 38 32">
+      <defs>
+        <linearGradient id="hlg" x1="0%" y1="100%" x2="100%" y2="0%">
+          <stop offset="0%" stop-color="#0050c8"/>
+          <stop offset="100%" stop-color="#00d4ff"/>
+        </linearGradient>
+      </defs>
+      <rect x="2" y="23" width="34" height="3.5" rx="1.5" fill="#1a3a5a"/>
+      <rect x="2" y="16" width="34" height="3.5" rx="1.5" fill="#1a3a5a"/>
+      <rect x="4"  y="15" width="3" height="12" rx="1" fill="#0d1d2e"/>
+      <rect x="10" y="15" width="3" height="12" rx="1" fill="#0d1d2e"/>
+      <rect x="16" y="15" width="3" height="12" rx="1" fill="#0d1d2e"/>
+      <rect x="22" y="15" width="3" height="12" rx="1" fill="#0d1d2e"/>
+      <rect x="28" y="15" width="3" height="12" rx="1" fill="#0d1d2e"/>
+      <polyline points="2,13 2,2 12,10 19,2 19,13"
+        fill="none" stroke="url(#hlg)" stroke-width="2.5"
+        stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div class="h-brand">
+      <div class="h-name">MoniRail</div>
+      <div class="h-sub">EN 12299 RIDE QUALITY MONITOR</div>
+    </div>
+  </div>
+  <div class="h-pills">
+    <span class="pill pill-off" id="pilIMU">IMU</span>
+    <span class="pill pill-off" id="pilGPS">GPS</span>
+    <span class="pill pill-off" id="pilREC">REC</span>
+  </div>
+</header>
+
+<!-- ═══════════════════════════════════════
+     MAIN
+════════════════════════════════════════ -->
+<main>
+
+  <!-- ── Speed + Values + Traffic Light ───── -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>LIVE INDICES</span>
+      <span class="card-hdr-accent" id="fsDisplay">Fs — Hz</span>
+    </div>
+    <div class="top-row">
+      <div id="speedWrap">
+        <canvas id="speedCanvas" width="90" height="80"></canvas>
+        <div class="speed-lbl">km/h</div>
+      </div>
+
+      <div class="val-grid">
+        <div class="vbox" id="boxCcz">
+          <div class="vlbl">CCZ</div>
+          <div class="vnum" id="numCcz">—</div>
+          <div class="vunit">VERTICAL</div>
+        </div>
+        <div class="vbox" id="boxCcy">
+          <div class="vlbl">CCY</div>
+          <div class="vnum" id="numCcy">—</div>
+          <div class="vunit">LATERAL</div>
+        </div>
+        <div class="vbox" id="boxNmv" style="grid-column:span 2;background:var(--bg4)">
+          <div class="vlbl">NMV — NORMALIZED MEAN VALUE</div>
+          <div class="vnum nmv" id="numNmv">—</div>
+          <div class="vunit">EN 12299 COMBINED COMFORT</div>
+        </div>
+      </div>
+
+      <div class="tlight-wrap">
+        <div class="tlight">
+          <div class="tl-dot tl-r" id="tlR"></div>
+          <div class="tl-dot tl-a" id="tlA"></div>
+          <div class="tl-dot tl-g" id="tlG"></div>
+        </div>
+        <div class="tl-label" id="tlLbl">WAIT</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Session Statistics ────────────────── -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>SESSION STATISTICS — EN 12299</span>
+      <span class="card-hdr-accent" id="sessionTime">00:00</span>
+    </div>
+    <div class="stats-grid">
+      <div class="stat-block">
+        <div class="stat-row">
+          <span class="stat-key">Pct COMFORT</span>
+          <span class="stat-val" id="statPct">—%</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill bar-green" id="barPct" style="width:0%"></div></div>
+      </div>
+      <div class="stat-block">
+        <div class="stat-row">
+          <span class="stat-key">Pde DISCOMFORT</span>
+          <span class="stat-val" id="statPde">—%</span>
+        </div>
+        <div class="bar-track"><div class="bar-fill bar-red" id="barPde" style="width:0%"></div></div>
+      </div>
+    </div>
+    <div class="gyro-row">
+      <div class="gyro-box">
+        <div class="gyro-lbl">ROLL °/s</div>
+        <div class="gyro-val" id="gRoll">—</div>
+      </div>
+      <div class="gyro-box">
+        <div class="gyro-lbl">PITCH °/s</div>
+        <div class="gyro-val" id="gPitch">—</div>
+      </div>
+      <div class="gyro-box">
+        <div class="gyro-lbl">EVENTS</div>
+        <div class="gyro-val" style="color:var(--red)" id="gEvents">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Live Charts ───────────────────────── -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>ACCELERATION INDICES — 60 s HISTORY</span>
+    </div>
+    <div class="legend">
+      <div class="leg-item"><div class="leg-line" style="background:var(--acc)"></div>Ccz vertical</div>
+      <div class="leg-item"><div class="leg-line" style="background:var(--orange)"></div>Ccy lateral</div>
+      <div class="leg-item"><div class="leg-line" style="background:var(--purple)"></div>NMV combined</div>
+    </div>
+    <canvas id="chartCanvas" height="140"></canvas>
+  </div>
+
+  <!-- ── GPS Map ───────────────────────────── -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>GPS TRACK</span>
+      <span class="card-hdr-accent" id="gpsAcc">—</span>
+    </div>
+    <div id="map"></div>
+    <div class="gps-row">
+      <span>Lat <span class="gps-val" id="gLat">—</span></span>
+      <span>Lon <span class="gps-val" id="gLon">—</span></span>
+      <span>Alt <span class="gps-val" id="gAlt">—</span> m</span>
+    </div>
+  </div>
+
+  <!-- ── Event Log ─────────────────────────── -->
+  <div class="card">
+    <div class="card-hdr">
+      <span>DISCOMFORT EVENT LOG ( NMV &gt; 10% threshold )</span>
+      <span class="card-hdr-accent" id="evCount">0</span>
+    </div>
+    <div class="evlog" id="evlog">
+      <div class="evlog-empty">No events detected — monitoring for NMV threshold breaches</div>
+    </div>
+  </div>
+
+  <!-- ── Controls ──────────────────────────── -->
+  <div class="ctrl-row">
+    <button class="btn btn-start" id="btnStart" onclick="toggleMonitor()">▶ START</button>
+    <button class="btn btn-rec"   id="btnRec"   onclick="toggleRecord()">⏺ RECORD</button>
+    <button class="btn btn-csv"              onclick="exportCSV()">⬇ CSV</button>
+  </div>
+
+  <div class="footer">MoniRail v1.0 &nbsp;·&nbsp; EN 12299:2009 &nbsp;·&nbsp; ISO 2631-1 &nbsp;·&nbsp; BCRRE</div>
+</main>
+
+<!-- ═══════════════════════════════════════
+     JAVASCRIPT
+════════════════════════════════════════ -->
+<script>
+// ════════════════════════════════════════════════
+//  BIQUAD FILTER (Direct Form II Transposed)
+// ════════════════════════════════════════════════
+class BQ {
+  constructor(b0,b1,b2,a1,a2){
+    this.b=[b0,b1,b2]; this.a=[a1,a2];
+    this.s=[0,0];
+  }
+  tick(x){
+    const y = this.b[0]*x + this.s[0];
+    this.s[0] = this.b[1]*x - this.a[0]*y + this.s[1];
+    this.s[1] = this.b[2]*x - this.a[1]*y;
+    return isFinite(y) ? y : 0;
+  }
+  reset(){ this.s=[0,0]; }
+}
+
+class BQChain {
+  constructor(stages){ this.f=stages.map(s=>new BQ(...s)); }
+  tick(x){ return this.f.reduce((v,f)=>f.tick(v),x); }
+  reset(){ this.f.forEach(f=>f.reset()); }
+}
+
+// ════════════════════════════════════════════════
+//  FILTER COEFFICIENTS @ Fs = 250 Hz
+//  Approximating ISO 2631 Wb (vertical) & Wd (lateral)
+//  Pre-computed via bilinear transform + cookbook EQ
+// ════════════════════════════════════════════════
+
+// Stage format: [b0, b1, b2, a1, a2]
+
+// Wb-like: HPF 0.5 Hz → Peak +8 dB @ 5 Hz Q=1.8 → LPF 25 Hz
+const COEFF_WB = [
+  [ 0.99115,-1.98230, 0.99115,-1.98231, 0.98239],  // HPF 0.5 Hz
+  [ 1.01971,-1.91726, 0.91285,-1.91726, 0.93257],  // Peak +8dB @5Hz
+  [ 0.06746, 0.13492, 0.06746,-1.14255, 0.41279]   // LPF 25 Hz
+];
+
+// Wd-like: HPF 0.5 Hz → Peak +10 dB @ 2 Hz Q=1.5 → LPF 10 Hz
+const COEFF_WD = [
+  [ 0.99115,-1.98230, 0.99115,-1.98231, 0.98239],  // HPF 0.5 Hz
+  [ 1.01282,-1.96464, 0.95422,-1.96464, 0.96703],  // Peak +10dB @2Hz
+  [ 0.01336, 0.02672, 0.01336,-1.64762, 0.70091]   // LPF 10 Hz
+];
+
+// Wh-like gyro weighting: HPF 0.5 Hz + LPF 20 Hz
+const COEFF_WH = [
+  [ 0.99115,-1.98230, 0.99115,-1.98231, 0.98239],
+  [ 0.04582, 0.09164, 0.04582,-1.31009, 0.49334]
+];
+
+// ════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════
+let monitoring = false;
+let recording  = false;
+let startTime  = 0;
+let sessionSec = 0;
+
+// Filters
+let fZ, fY, fRoll, fPitch;
+
+// Circular RMS accumulators (5 s window)
+const WIN_S  = 5;      // seconds
+const FS_MAX = 250;    // max expected
+let   winSize = 1250;  // will recalculate
+
+let sqZ=[], sqY=[], sqR=[], sqP=[];
+
+// Sample rate estimate
+let sampleCount = 0;
+let lastMotionT = 0;
+let fsEst = 100;
+
+// Current computed values
+let ccz=0, ccy=0, nmv=0;
+let rollRms=0, pitchRms=0;
+
+// GPS
+let lat=null, lon=null, alt=null, gpsSpeed=0, gpsHeading=0;
+let gpsTrk=[], evMarkers=[];
+let leafMap=null, polyLine=null, posMarker=null;
+
+// Statistics
+let evalWindows=0, comfWindows=0;
+let discomfortCount=0, totalDiscomfort=0; // for Pde
+let prevNmv=0;
+
+// Event log
+let eventList=[];
+let lastEventTime=0;
+
+// Chart history (1 value/sec, 60s)
+const CHART_N = 60;
+let cht={ ccz:[], ccy:[], nmv:[] };
+
+// CSV data
+let csvRows=[];
+let csvIntervalId=null;
+
+// Update intervals
+let uiTimer=null;
+let chartTimer=null;
+let sessionTimer=null;
+
+// ════════════════════════════════════════════════
+//  PERMISSIONS
+// ════════════════════════════════════════════════
+async function requestPermissions(){
+  // iOS 13+ motion permission
+  if(typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function'){
+    try {
+      const r = await DeviceMotionEvent.requestPermission();
+      if(r !== 'granted'){ alert('Motion permission denied.'); return; }
+    } catch(e){ alert('Permission error: '+e); return; }
+  }
+  initAll();
+  document.getElementById('permOverlay').classList.add('hidden');
+}
+
+function initAll(){
+  initFilters();
+  initMap();
+  initGPS();
+  initUI();
+  drawSpeedGauge(0);
+  drawChart();
+}
+
+// ════════════════════════════════════════════════
+//  FILTER INIT
+// ════════════════════════════════════════════════
+function initFilters(){
+  fZ    = new BQChain(COEFF_WB);
+  fY    = new BQChain(COEFF_WD);
+  fRoll = new BQChain(COEFF_WH);
+  fPitch= new BQChain(COEFF_WH);
+}
+
+function resetFilters(){
+  fZ.reset(); fY.reset(); fRoll.reset(); fPitch.reset();
+}
+
+// ════════════════════════════════════════════════
+//  MONITORING TOGGLE
+// ════════════════════════════════════════════════
+function toggleMonitor(){
+  if(!monitoring){ startMonitor(); }
+  else            { stopMonitor();  }
+}
+
+function startMonitor(){
+  monitoring = true;
+  startTime  = Date.now();
+  sampleCount= 0; lastMotionT=0; fsEst=100;
+  sqZ=[]; sqY=[]; sqR=[]; sqP=[];
+  evalWindows=0; comfWindows=0; discomfortCount=0; totalDiscomfort=0;
+  resetFilters();
+
+  window.addEventListener('devicemotion', onMotion, {passive:true});
+
+  document.getElementById('btnStart').textContent='⏹ STOP';
+  document.getElementById('btnStart').classList.add('running');
+  document.getElementById('pilIMU').className='pill pill-on';
+
+  // UI update loop
+  uiTimer = setInterval(updateUI, 200);
+
+  // Chart update (every 1 s)
+  chartTimer = setInterval(()=>{
+    cht.ccz.push(ccz); cht.ccy.push(ccy); cht.nmv.push(nmv);
+    if(cht.ccz.length>CHART_N){ cht.ccz.shift(); cht.ccy.shift(); cht.nmv.shift(); }
+    drawChart();
+  }, 1000);
+
+  // Session timer
+  sessionTimer = setInterval(()=>{
+    sessionSec = Math.floor((Date.now()-startTime)/1000);
+    const m=String(Math.floor(sessionSec/60)).padStart(2,'0');
+    const s=String(sessionSec%60).padStart(2,'0');
+    document.getElementById('sessionTime').textContent=`${m}:${s}`;
+  }, 1000);
+
+  // 5-second eval window
+  setInterval(evalWindow, 5000);
+}
+
+function stopMonitor(){
+  monitoring = false;
+  window.removeEventListener('devicemotion', onMotion);
+  clearInterval(uiTimer); clearInterval(chartTimer); clearInterval(sessionTimer);
+  document.getElementById('btnStart').textContent='▶ START';
+  document.getElementById('btnStart').classList.remove('running');
+  document.getElementById('pilIMU').className='pill pill-off';
+}
+
+// ════════════════════════════════════════════════
+//  MOTION EVENT HANDLER
+// ════════════════════════════════════════════════
+function onMotion(e){
+  const now = performance.now();
+
+  // Sample rate estimation (EMA)
+  if(lastMotionT>0){
+    const dt = (now-lastMotionT)/1000;
+    if(dt>0) fsEst = fsEst*0.95 + (1/dt)*0.05;
+  }
+  lastMotionT = now;
+  sampleCount++;
+
+  // Get linear acceleration (m/s²) – prefer without gravity
+  let ax=0, ay=0, az=0;
+  const acc = e.acceleration;
+  const accG = e.accelerationIncludingGravity;
+  if(acc && acc.x!=null){
+    ax=acc.x||0; ay=acc.y||0; az=acc.z||0;
+  } else if(accG){
+    ax=accG.x||0; ay=accG.y||0; az=accG.z||0;
+    // HPF will remove gravity
+  }
+
+  // Rotation rates (deg/s → rad/s)
+  let rRate=0, pRate=0, yRate=0;
+  if(e.rotationRate){
+    rRate=(e.rotationRate.beta ||0)*Math.PI/180;
+    pRate=(e.rotationRate.alpha||0)*Math.PI/180;
+    yRate=(e.rotationRate.gamma||0)*Math.PI/180;
+  }
+
+  // Apply frequency weighting
+  const az_w = fZ.tick(az);
+  const ay_w = fY.tick(ay);
+  const r_w  = fRoll.tick(rRate);
+  const p_w  = fPitch.tick(pRate);
+
+  // Push squared values into rolling window buffers
+  winSize = Math.max(50, Math.round(fsEst * WIN_S));
+  pushBuf(sqZ, az_w*az_w);
+  pushBuf(sqY, ay_w*ay_w);
+  pushBuf(sqR, r_w*r_w);
+  pushBuf(sqP, p_w*p_w);
+
+  // Compute running RMS
+  const rmsZ = Math.sqrt(mean(sqZ));
+  const rmsY = Math.sqrt(mean(sqY));
+  const rmsR = Math.sqrt(mean(sqR));
+  const rmsP = Math.sqrt(mean(sqP));
+
+  // EN 12299: Ccz = 6·a_wz,rms  Ccy = 6·a_wy,rms
+  ccz = 6 * rmsZ;
+  ccy = 6 * rmsY;
+
+  // NMV = sqrt((Ccz²+Ccy²)/2)
+  nmv = Math.sqrt((ccz*ccz + ccy*ccy) / 2);
+
+  // Gyro RMS in deg/s
+  rollRms  = rmsR * 180/Math.PI;
+  pitchRms = rmsP * 180/Math.PI;
+
+  // Event detection: NMV spike > 10% above session mean or absolute threshold
+  detectEvent(ax,ay,az,rRate*180/Math.PI,pRate*180/Math.PI);
+
+  // CSV row
+  if(recording){
+    csvRows.push([
+      Date.now(), now.toFixed(1),
+      ax.toFixed(4), ay.toFixed(4), az.toFixed(4),
+      (rRate*180/Math.PI).toFixed(3), (pRate*180/Math.PI).toFixed(3), (yRate*180/Math.PI).toFixed(3),
+      ccz.toFixed(4), ccy.toFixed(4), nmv.toFixed(4),
+      gpsSpeed.toFixed(1), lat||'', lon||''
+    ].join(','));
+  }
+}
+
+// ════════════════════════════════════════════════
+//  5-SECOND EVALUATION WINDOW (EN 12299 Pct/Pde)
+// ════════════════════════════════════════════════
+function evalWindow(){
+  if(!monitoring || sqZ.length < 10) return;
+  evalWindows++;
+  // Pct: window is "comfortable" if NMV < 2.0
+  if(nmv < 2.0) comfWindows++;
+  // Pde: window counts as discomfort event if nmv > 2.5 or gyro > 30 deg/s rms
+  if(nmv > 2.5 || rollRms > 30 || pitchRms > 30) totalDiscomfort++;
+}
+
+// ════════════════════════════════════════════════
+//  EVENT DETECTION
+// ════════════════════════════════════════════════
+// Threshold: NMV above 10% of comfortable zone boundary (2.0 → 2.2 trigger)
+const NMV_EVENT_THRESH = 2.2;
+const GYRO_EVENT_THRESH = 25; // deg/s
+
+function detectEvent(ax,ay,az,rollD,pitchD){
+  const now = Date.now();
+  if(now - lastEventTime < 3000) return; // debounce 3s
+
+  const gyroExc = Math.max(Math.abs(rollD), Math.abs(pitchD));
+
+  if(nmv > NMV_EVENT_THRESH || gyroExc > GYRO_EVENT_THRESH){
+    lastEventTime = now;
+    discomfortCount++;
+
+    const ev = {
+      t:    new Date(now).toTimeString().slice(0,8),
+      nmv:  nmv.toFixed(3),
+      ccz:  ccz.toFixed(3),
+      ccy:  ccy.toFixed(3),
+      roll: rollD.toFixed(1),
+      pitch:pitchD.toFixed(1),
+      spd:  gpsSpeed.toFixed(1),
+      lat:  lat ? lat.toFixed(5) : '—',
+      lon:  lon ? lon.toFixed(5) : '—'
+    };
+    eventList.unshift(ev);
+    if(eventList.length > 100) eventList.pop();
+
+    // Map marker
+    if(lat && lon && leafMap){
+      const circle = L.circleMarker([lat,lon],{
+        radius:7, color:nmv>3?'#ff3b3b':'#ffb020',
+        fillColor:nmv>3?'#ff3b3b':'#ffb020',
+        fillOpacity:0.8, weight:2
+      }).addTo(leafMap)
+        .bindPopup(`<b>NMV ${ev.nmv}</b><br>Ccz:${ev.ccz} Ccy:${ev.ccy}<br>Roll:${ev.roll}°/s Pitch:${ev.pitch}°/s<br>${ev.t}`);
+      evMarkers.push(circle);
+    }
+
+    updateEventLog();
+    document.getElementById('gEvents').textContent=discomfortCount;
+    document.getElementById('evCount').textContent=discomfortCount;
+  }
+}
+
+// ════════════════════════════════════════════════
+//  GPS
+// ════════════════════════════════════════════════
+function initGPS(){
+  if(!navigator.geolocation) return;
+  navigator.geolocation.watchPosition(onGPS, null, {
+    enableHighAccuracy:true, maximumAge:1000, timeout:10000
+  });
+}
+
+function onGPS(pos){
+  lat = pos.coords.latitude;
+  lon = pos.coords.longitude;
+  alt = pos.coords.altitude ? pos.coords.altitude.toFixed(0) : '—';
+  gpsSpeed = pos.coords.speed ? pos.coords.speed*3.6 : gpsSpeed;
+
+  document.getElementById('pilGPS').className='pill pill-on';
+  document.getElementById('gLat').textContent=lat.toFixed(5);
+  document.getElementById('gLon').textContent=lon.toFixed(5);
+  document.getElementById('gAlt').textContent=alt;
+  document.getElementById('gpsAcc').textContent='±'+Math.round(pos.coords.accuracy)+'m';
+
+  if(leafMap){
+    const ll=[lat,lon];
+    gpsTrk.push(ll);
+    polyLine.setLatLngs(gpsTrk);
+    posMarker.setLatLng(ll);
+    if(gpsTrk.length===1 || gpsTrk.length%20===0) leafMap.panTo(ll);
+  }
+}
+
+// ════════════════════════════════════════════════
+//  LEAFLET MAP
+// ════════════════════════════════════════════════
+function initMap(){
+  leafMap = L.map('map',{zoomControl:false, attributionControl:false});
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png',{
+    maxZoom:19
+  }).addTo(leafMap);
+  L.control.zoom({position:'bottomright'}).addTo(leafMap);
+  polyLine  = L.polyline([],{color:'#00d4ff',weight:2.5,opacity:0.8}).addTo(leafMap);
+  posMarker = L.circleMarker([51.5,-0.1],{
+    radius:8, color:'#00d4ff', fillColor:'#00d4ff', fillOpacity:1, weight:2
+  }).addTo(leafMap);
+  leafMap.setView([51.5,-0.1],14);
+
+  // Try to jump to user location
+  navigator.geolocation&&navigator.geolocation.getCurrentPosition(p=>{
+    leafMap.setView([p.coords.latitude,p.coords.longitude],16);
+    posMarker.setLatLng([p.coords.latitude,p.coords.longitude]);
+  },null,{timeout:5000});
+}
+
+// ════════════════════════════════════════════════
+//  UI UPDATE
+// ════════════════════════════════════════════════
+function updateUI(){
+  // Comfort class
+  let cls='good', comfort='COMFORT', tl='g';
+  if(nmv >= 3.0){       cls='bad';  comfort='UNCOMF.'; tl='r'; }
+  else if(nmv >= 1.5){  cls='med';  comfort='MEDIUM';  tl='a'; }
+
+  // Values
+  setVal('numCcz', ccz, cls);
+  setVal('numCcy', ccy, cls);
+  setVal('numNmv', nmv, cls, true);
+
+  // Traffic light
+  document.getElementById('tlR').className='tl-dot tl-r'+(tl==='r'?' on':'');
+  document.getElementById('tlA').className='tl-dot tl-a'+(tl==='a'?' on':'');
+  document.getElementById('tlG').className='tl-dot tl-g'+(tl==='g'?' on':'');
+  document.getElementById('tlLbl').textContent=comfort;
+
+  // Box accents
+  ['boxCcz','boxCcy','boxNmv'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.className='vbox'; el.classList.add(cls);
+  });
+
+  // Speed gauge
+  drawSpeedGauge(gpsSpeed);
+  document.getElementById('fsDisplay').textContent=`Fs ${Math.round(fsEst)} Hz`;
+
+  // Stats
+  const pct = evalWindows>0 ? (comfWindows/evalWindows*100).toFixed(1) : '—';
+  const pde = evalWindows>0 ? (totalDiscomfort/evalWindows*100).toFixed(1) : '—';
+  document.getElementById('statPct').textContent=pct+'%';
+  document.getElementById('statPde').textContent=pde+'%';
+  if(evalWindows>0){
+    document.getElementById('barPct').style.width=Math.min(100,comfWindows/evalWindows*100)+'%';
+    document.getElementById('barPde').style.width=Math.min(100,totalDiscomfort/evalWindows*100)+'%';
+  }
+
+  // Gyro
+  document.getElementById('gRoll').textContent=rollRms.toFixed(2);
+  document.getElementById('gPitch').textContent=pitchRms.toFixed(2);
+}
+
+function setVal(id, v, cls, big){
+  const el=document.getElementById(id);
+  el.textContent = v>0 ? v.toFixed(3) : '—';
+  el.className='vnum'+(big?' nmv':'')+' '+cls;
+}
+
+// ════════════════════════════════════════════════
+//  SPEED GAUGE (Canvas)
+// ════════════════════════════════════════════════
+function drawSpeedGauge(spd){
+  const c=document.getElementById('speedCanvas');
+  const ctx=c.getContext('2d');
+  const W=c.width, H=c.height;
+  const cx=W/2, cy=H*0.56;
+  const R=32;
+  ctx.clearRect(0,0,W,H);
+
+  // Background arc
+  const startA = Math.PI*0.8, endA = Math.PI*2.2;
+  ctx.beginPath();
+  ctx.arc(cx,cy,R,startA,endA);
+  ctx.strokeStyle='#131e2c';
+  ctx.lineWidth=6;
+  ctx.lineCap='round';
+  ctx.stroke();
+
+  // Color zones
+  const zones=[
+    {from:0,  to:0.33, c:'#00e87a'},
+    {from:0.33,to:0.66, c:'#ffb020'},
+    {from:0.66,to:1.0,  c:'#ff3b3b'}
+  ];
+  const span=endA-startA;
+  zones.forEach(z=>{
+    ctx.beginPath();
+    ctx.arc(cx,cy,R,startA+z.from*span,startA+z.to*span);
+    ctx.strokeStyle=z.c;
+    ctx.lineWidth=4;
+    ctx.globalAlpha=0.35;
+    ctx.stroke();
+    ctx.globalAlpha=1;
+  });
+
+  // Active arc
+  const maxSpd=200;
+  const prog=Math.min(1,spd/maxSpd);
+  const activeEnd=startA+prog*span;
+  const grad=ctx.createLinearGradient(cx-R,cy,cx+R,cy);
+  grad.addColorStop(0,'#0050c8'); grad.addColorStop(1,'#00d4ff');
+  ctx.beginPath();
+  ctx.arc(cx,cy,R,startA,activeEnd);
+  ctx.strokeStyle=grad;
+  ctx.lineWidth=5;
+  ctx.lineCap='round';
+  ctx.stroke();
+
+  // Needle
+  const nA=startA+prog*span;
+  ctx.save();
+  ctx.translate(cx,cy);
+  ctx.rotate(nA);
+  ctx.beginPath();
+  ctx.moveTo(-4,0); ctx.lineTo(R-6,0);
+  ctx.strokeStyle='#fff';
+  ctx.lineWidth=1.5;
+  ctx.lineCap='round';
+  ctx.stroke();
+  ctx.restore();
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx,cy,4,0,Math.PI*2);
+  ctx.fillStyle='#00d4ff';
+  ctx.fill();
+
+  // Speed text
+  ctx.textAlign='center';
+  ctx.font=`700 ${spd>=100?'13':'14'}px 'Share Tech Mono'`;
+  ctx.fillStyle='#c8daf0';
+  ctx.fillText(Math.round(spd),cx,cy-R-8);
+}
+
+// ════════════════════════════════════════════════
+//  CHART (Canvas)
+// ════════════════════════════════════════════════
+function drawChart(){
+  const c=document.getElementById('chartCanvas');
+  if(!c) return;
+  c.width=c.parentElement.clientWidth-24;
+  const W=c.width, H=c.height;
+  const ctx=c.getContext('2d');
+
+  ctx.clearRect(0,0,W,H);
+
+  // Background
+  ctx.fillStyle='#0b1018';
+  ctx.fillRect(0,0,W,H);
+
+  // Grid
+  const maxY=6;
+  const thresholds=[{v:1.0,c:'#00e87a'},{v:2.0,c:'#ffb020'},{v:3.0,c:'#ff3b3b'}];
+  thresholds.forEach(th=>{
+    const y=H - (th.v/maxY)*H;
+    ctx.beginPath();
+    ctx.moveTo(0,y); ctx.lineTo(W,y);
+    ctx.strokeStyle=th.c; ctx.lineWidth=0.5; ctx.setLineDash([4,6]);
+    ctx.globalAlpha=0.4; ctx.stroke(); ctx.globalAlpha=1;
+
+    ctx.font='9px Share Tech Mono';
+    ctx.fillStyle=th.c; ctx.globalAlpha=0.6;
+    ctx.fillText(th.v.toFixed(1),3,y-2);
+    ctx.globalAlpha=1;
+  });
+  ctx.setLineDash([]);
+
+  if(cht.ccz.length < 2) return;
+
+  const n=cht.ccz.length;
+  const step=W/(CHART_N-1);
+
+  function drawLine(data,color,lineW){
+    ctx.beginPath();
+    data.forEach((v,i)=>{
+      const x=W - (n-1-i)*step;
+      const y=H - Math.min(1,v/maxY)*H;
+      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    });
+    ctx.strokeStyle=color;
+    ctx.lineWidth=lineW||1.5;
+    ctx.lineJoin='round';
+    ctx.lineCap='round';
+
+    // Glow
+    ctx.shadowBlur=6; ctx.shadowColor=color;
+    ctx.stroke();
+    ctx.shadowBlur=0;
+  }
+
+  drawLine(cht.ccz,'#00d4ff',1.5);
+  drawLine(cht.ccy,'#ff6030',1.5);
+  drawLine(cht.nmv,'#b060ff',2);
+
+  // Time axis labels
+  ctx.font='8px Share Tech Mono';
+  ctx.fillStyle='#2a4050';
+  ctx.fillText('60s',4,H-3);
+  ctx.fillText('now',W-24,H-3);
+}
+
+// ════════════════════════════════════════════════
+//  EVENT LOG
+// ════════════════════════════════════════════════
+function updateEventLog(){
+  const el=document.getElementById('evlog');
+  if(eventList.length===0){
+    el.innerHTML='<div class="evlog-empty">No events detected</div>';
+    return;
+  }
+  el.innerHTML=eventList.map(ev=>`
+    <div class="ev-item">
+      <span class="ev-time">${ev.t}</span>
+      <span class="ev-desc">NMV ${ev.nmv} | Ccz ${ev.ccz} Ccy ${ev.ccy} | ${ev.spd} km/h | ${ev.lat},${ev.lon}</span>
+      <span class="ev-nmv">▲${ev.nmv}</span>
+    </div>
+  `).join('');
+}
+
+// ════════════════════════════════════════════════
+//  RECORDING
+// ════════════════════════════════════════════════
+const CSV_HEADER = 'timestamp_ms,perf_ms,ax_ms2,ay_ms2,az_ms2,roll_degs,pitch_degs,yaw_degs,Ccz,Ccy,NMV,speed_kmh,lat,lon';
+
+function toggleRecord(){
+  recording = !recording;
+  const btn=document.getElementById('btnRec');
+  const pill=document.getElementById('pilREC');
+  if(recording){
+    csvRows=[CSV_HEADER];
+    btn.classList.add('active');
+    btn.textContent='⏹ STOP REC';
+    pill.className='pill pill-rec';
+  } else {
+    btn.classList.remove('active');
+    btn.textContent='⏺ RECORD';
+    pill.className='pill pill-off';
+  }
+}
+
+function exportCSV(){
+  if(csvRows.length<2){ alert('No data recorded yet.\nPress RECORD then START to capture data.'); return; }
+  const blob=new Blob([csvRows.join('\n')],{type:'text/csv'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download=`monirail_${new Date().toISOString().replace(/[:.]/g,'-').slice(0,19)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
+
+// ════════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════════
+function pushBuf(arr, v){
+  arr.push(v);
+  if(arr.length > winSize) arr.shift();
+}
+
+function mean(arr){
+  if(!arr.length) return 0;
+  return arr.reduce((s,v)=>s+v,0)/arr.length;
+}
+
+// ════════════════════════════════════════════════
+//  INIT UI (draw idle state)
+// ════════════════════════════════════════════════
+function initUI(){
+  drawSpeedGauge(0);
+  drawChart();
+  // Trigger resize on orientation change
+  window.addEventListener('orientationchange',()=>{ setTimeout(drawChart,300); });
+  window.addEventListener('resize',drawChart);
+}
+
+// ════════════════════════════════════════════════
+//  AUTO-START on page load if iOS permission not needed
+// ════════════════════════════════════════════════
+window.addEventListener('load',()=>{
+  if(typeof DeviceMotionEvent === 'undefined' ||
+     typeof DeviceMotionEvent.requestPermission !== 'function'){
+    // Android or non-restrictive browser — skip permission screen
+    initAll();
+    document.getElementById('permOverlay').classList.add('hidden');
+  }
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Android sensor dashboard</title>
+  <style>
+    :root {
+      --bg: #0b1220;
+      --panel: #121a2b;
+      --panel-2: #172238;
+      --text: #e8eefc;
+      --muted: #9eb0d1;
+      --accent: #7fb3ff;
+      --good: #69d39f;
+      --warn: #ffc76a;
+      --bad: #ff8f8f;
+      --border: #253453;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(180deg, #09101c 0%, #0f1728 100%);
+      color: var(--text);
+    }
+
+    .wrap {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 1.5rem;
+    }
+
+    p {
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      background: rgba(18, 26, 43, 0.96);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 14px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 1rem;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin: 14px 0 18px;
+    }
+
+    button {
+      border: 0;
+      border-radius: 14px;
+      padding: 12px 14px;
+      font-size: 0.95rem;
+      font-weight: 600;
+      cursor: pointer;
+      background: var(--panel-2);
+      color: var(--text);
+      border: 1px solid var(--border);
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: #08111f;
+    }
+
+    button.good { background: var(--good); color: #08111f; }
+    button.warn { background: var(--warn); color: #08111f; }
+    button.bad { background: var(--bad); color: #08111f; }
+
+    .stat-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+
+    .stat {
+      background: rgba(23, 34, 56, 0.9);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+    }
+
+    .label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-bottom: 4px;
+    }
+
+    .value {
+      font-size: 1rem;
+      font-weight: 700;
+      word-break: break-word;
+    }
+
+    .chart-wrap {
+      height: 250px;
+      position: relative;
+    }
+
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+      background: #0d1628;
+      border-radius: 14px;
+      border: 1px solid var(--border);
+    }
+
+    .status {
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .small {
+      font-size: 0.85rem;
+      color: var(--muted);
+    }
+
+    .log {
+      max-height: 180px;
+      overflow: auto;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: 0.8rem;
+      background: #0d1628;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 10px;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 640px) {
+      .stat-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Android sensor dashboard</h1>
+    <p>
+      This page reads GPS and accelerometer data from a phone browser, plots live acceleration, and stores samples for export.
+      Open it in Chrome on Android over HTTPS or from localhost. Start from a user tap so the browser will allow sensor access.
+    </p>
+
+    <div class="controls">
+      <button id="startBtn" class="primary">Start sensors</button>
+      <button id="stopBtn">Stop sensors</button>
+      <button id="clearBtn">Clear data</button>
+      <button id="exportBtn" class="good">Export CSV</button>
+    </div>
+
+    <div class="grid">
+      <section class="panel">
+        <h2>Live status</h2>
+        <p class="small">State: <span id="status" class="status">Idle</span></p>
+        <div class="stat-grid">
+          <div class="stat"><span class="label">Accel X (m/s²)</span><span id="ax" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Accel Y (m/s²)</span><span id="ay" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Accel Z (m/s²)</span><span id="az" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Accel magnitude (m/s²)</span><span id="amag" class="value">0.000</span></div>
+          <div class="stat"><span class="label">Latitude</span><span id="lat" class="value">-</span></div>
+          <div class="stat"><span class="label">Longitude</span><span id="lon" class="value">-</span></div>
+          <div class="stat"><span class="label">GPS speed (m/s)</span><span id="speed" class="value">-</span></div>
+          <div class="stat"><span class="label">Accuracy (m)</span><span id="accuracy" class="value">-</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Acceleration plot</h2>
+        <div class="chart-wrap">
+          <canvas id="chart" width="900" height="250"></canvas>
+        </div>
+        <p class="small">Shows the last 30 seconds of acceleration data for X, Y, and Z.</p>
+      </section>
+
+      <section class="panel">
+        <h2>Session summary</h2>
+        <div class="stat-grid">
+          <div class="stat"><span class="label">Motion samples</span><span id="motionCount" class="value">0</span></div>
+          <div class="stat"><span class="label">GPS samples</span><span id="gpsCount" class="value">0</span></div>
+          <div class="stat"><span class="label">Elapsed (s)</span><span id="elapsed" class="value">0.0</span></div>
+          <div class="stat"><span class="label">Approx. distance (m)</span><span id="distance" class="value">0.0</span></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Debug log</h2>
+        <div id="log" class="log"></div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const state = {
+      running: false,
+      motionListener: null,
+      watchId: null,
+      startTime: null,
+      motionSamples: [],
+      gpsSamples: [],
+      chartWindowMs: 30000,
+      maxSamples: 6000,
+      distanceMeters: 0,
+      lastGps: null,
+      animationFrame: null
+    };
+
+    const els = {
+      status: document.getElementById('status'),
+      ax: document.getElementById('ax'),
+      ay: document.getElementById('ay'),
+      az: document.getElementById('az'),
+      amag: document.getElementById('amag'),
+      lat: document.getElementById('lat'),
+      lon: document.getElementById('lon'),
+      speed: document.getElementById('speed'),
+      accuracy: document.getElementById('accuracy'),
+      motionCount: document.getElementById('motionCount'),
+      gpsCount: document.getElementById('gpsCount'),
+      elapsed: document.getElementById('elapsed'),
+      distance: document.getElementById('distance'),
+      log: document.getElementById('log'),
+      chart: document.getElementById('chart')
+    };
+
+    function log(message) {
+      const stamp = new Date().toLocaleTimeString();
+      els.log.textContent = `[${stamp}] ${message}\n` + els.log.textContent;
+    }
+
+    function setStatus(text) {
+      els.status.textContent = text;
+    }
+
+    function formatNumber(v, digits = 3) {
+      return Number.isFinite(v) ? v.toFixed(digits) : '-';
+    }
+
+    function updateSummary() {
+      els.motionCount.textContent = String(state.motionSamples.length);
+      els.gpsCount.textContent = String(state.gpsSamples.length);
+      const elapsed = state.startTime ? (performance.now() - state.startTime) / 1000 : 0;
+      els.elapsed.textContent = elapsed.toFixed(1);
+      els.distance.textContent = state.distanceMeters.toFixed(1);
+    }
+
+    function haversineMeters(lat1, lon1, lat2, lon2) {
+      const R = 6371000;
+      const toRad = deg => deg * Math.PI / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return 2 * R * Math.asin(Math.sqrt(a));
+    }
+
+    function addMotionSample(sample) {
+      state.motionSamples.push(sample);
+      if (state.motionSamples.length > state.maxSamples) {
+        state.motionSamples.splice(0, state.motionSamples.length - state.maxSamples);
+      }
+    }
+
+    function addGpsSample(sample) {
+      if (state.lastGps) {
+        state.distanceMeters += haversineMeters(
+          state.lastGps.lat,
+          state.lastGps.lon,
+          sample.lat,
+          sample.lon
+        );
+      }
+      state.lastGps = sample;
+      state.gpsSamples.push(sample);
+      if (state.gpsSamples.length > state.maxSamples) {
+        state.gpsSamples.splice(0, state.gpsSamples.length - state.maxSamples);
+      }
+    }
+
+    function resizeCanvasToDisplaySize(canvas) {
+      const rect = canvas.getBoundingClientRect();
+      const dpr = window.devicePixelRatio || 1;
+      const width = Math.round(rect.width * dpr);
+      const height = Math.round(rect.height * dpr);
+      if (canvas.width !== width || canvas.height !== height) {
+        canvas.width = width;
+        canvas.height = height;
+      }
+      return { width, height, dpr };
+    }
+
+    function drawChart() {
+      const canvas = els.chart;
+      const ctx = canvas.getContext('2d');
+      const { width, height } = resizeCanvasToDisplaySize(canvas);
+      ctx.clearRect(0, 0, width, height);
+
+      ctx.fillStyle = '#0d1628';
+      ctx.fillRect(0, 0, width, height);
+
+      const padding = 40;
+      const plotW = width - padding * 2;
+      const plotH = height - padding * 2;
+      const now = performance.now();
+      const windowStart = now - state.chartWindowMs;
+      const samples = state.motionSamples.filter(s => s.t >= windowStart);
+
+      ctx.strokeStyle = '#2d3b5a';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 4; i++) {
+        const y = padding + i * (plotH / 4);
+        ctx.beginPath();
+        ctx.moveTo(padding, y);
+        ctx.lineTo(padding + plotW, y);
+        ctx.stroke();
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(padding, padding + plotH / 2);
+      ctx.lineTo(padding + plotW, padding + plotH / 2);
+      ctx.strokeStyle = '#8fa7d6';
+      ctx.stroke();
+
+      ctx.fillStyle = '#9eb0d1';
+      ctx.font = `${Math.max(12, Math.round(width / 60))}px system-ui`;
+      ctx.fillText('Time window: 30 s', padding, padding - 12);
+      ctx.fillText('+20', 6, padding + 8);
+      ctx.fillText('0', 16, padding + plotH / 2 + 4);
+      ctx.fillText('-20', 6, padding + plotH - 4);
+
+      if (samples.length < 2) {
+        ctx.fillText('Waiting for motion data...', padding + 20, padding + plotH / 2);
+        return;
+      }
+
+      const maxAbs = 20;
+      const toX = t => padding + ((t - windowStart) / state.chartWindowMs) * plotW;
+      const toY = v => padding + plotH * (0.5 - Math.max(-maxAbs, Math.min(maxAbs, v)) / (2 * maxAbs));
+
+      const drawLine = (key, colour) => {
+        ctx.beginPath();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = colour;
+        samples.forEach((s, i) => {
+          const x = toX(s.t);
+          const y = toY(s[key]);
+          if (i === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        });
+        ctx.stroke();
+      };
+
+      drawLine('x', '#7fb3ff');
+      drawLine('y', '#69d39f');
+      drawLine('z', '#ffc76a');
+
+      ctx.fillStyle = '#7fb3ff';
+      ctx.fillText('X', width - 90, padding - 12);
+      ctx.fillStyle = '#69d39f';
+      ctx.fillText('Y', width - 60, padding - 12);
+      ctx.fillStyle = '#ffc76a';
+      ctx.fillText('Z', width - 30, padding - 12);
+    }
+
+    function animationLoop() {
+      drawChart();
+      updateSummary();
+      state.animationFrame = requestAnimationFrame(animationLoop);
+    }
+
+    function handleMotion(event) {
+      const acc = event.accelerationIncludingGravity || event.acceleration;
+      if (!acc) return;
+
+      const x = Number(acc.x ?? 0);
+      const y = Number(acc.y ?? 0);
+      const z = Number(acc.z ?? 0);
+      const mag = Math.sqrt(x * x + y * y + z * z);
+      const t = performance.now();
+      const iso = new Date().toISOString();
+
+      addMotionSample({ t, iso, x, y, z, mag });
+
+      els.ax.textContent = formatNumber(x);
+      els.ay.textContent = formatNumber(y);
+      els.az.textContent = formatNumber(z);
+      els.amag.textContent = formatNumber(mag);
+    }
+
+    function handleGps(position) {
+      const c = position.coords;
+      const sample = {
+        t: performance.now(),
+        iso: new Date().toISOString(),
+        lat: c.latitude,
+        lon: c.longitude,
+        speed: c.speed,
+        accuracy: c.accuracy,
+        altitude: c.altitude,
+        heading: c.heading
+      };
+
+      addGpsSample(sample);
+
+      els.lat.textContent = formatNumber(sample.lat, 6);
+      els.lon.textContent = formatNumber(sample.lon, 6);
+      els.speed.textContent = formatNumber(sample.speed, 2);
+      els.accuracy.textContent = formatNumber(sample.accuracy, 1);
+    }
+
+    function handleGpsError(error) {
+      log(`GPS error ${error.code}: ${error.message}`);
+    }
+
+    async function requestMotionPermissionIfNeeded() {
+      if (typeof DeviceMotionEvent === 'undefined') {
+        throw new Error('DeviceMotionEvent is not supported on this device/browser.');
+      }
+
+      if (typeof DeviceMotionEvent.requestPermission === 'function') {
+        const result = await DeviceMotionEvent.requestPermission();
+        if (result !== 'granted') {
+          throw new Error('Motion permission was not granted.');
+        }
+      }
+    }
+
+    function startGps() {
+      if (!('geolocation' in navigator)) {
+        throw new Error('Geolocation is not supported in this browser.');
+      }
+
+      state.watchId = navigator.geolocation.watchPosition(handleGps, handleGpsError, {
+        enableHighAccuracy: true,
+        maximumAge: 0,
+        timeout: 10000
+      });
+    }
+
+    function stopSensors() {
+      if (state.motionListener) {
+        window.removeEventListener('devicemotion', state.motionListener);
+        state.motionListener = null;
+      }
+
+      if (state.watchId !== null) {
+        navigator.geolocation.clearWatch(state.watchId);
+        state.watchId = null;
+      }
+
+      if (state.animationFrame) {
+        cancelAnimationFrame(state.animationFrame);
+        state.animationFrame = null;
+      }
+
+      state.running = false;
+      setStatus('Stopped');
+      log('Sensors stopped.');
+    }
+
+    async function startSensors() {
+      if (state.running) return;
+      try {
+        setStatus('Requesting permissions');
+        await requestMotionPermissionIfNeeded();
+
+        state.motionListener = handleMotion;
+        window.addEventListener('devicemotion', state.motionListener, { passive: true });
+        startGps();
+
+        state.running = true;
+        if (!state.startTime) state.startTime = performance.now();
+        setStatus('Running');
+        log('Sensors started.');
+
+        if (!state.animationFrame) {
+          animationLoop();
+        }
+      } catch (error) {
+        setStatus('Error');
+        log(error.message || String(error));
+      }
+    }
+
+    function clearData() {
+      state.motionSamples = [];
+      state.gpsSamples = [];
+      state.startTime = state.running ? performance.now() : null;
+      state.distanceMeters = 0;
+      state.lastGps = null;
+      els.ax.textContent = '0.000';
+      els.ay.textContent = '0.000';
+      els.az.textContent = '0.000';
+      els.amag.textContent = '0.000';
+      els.lat.textContent = '-';
+      els.lon.textContent = '-';
+      els.speed.textContent = '-';
+      els.accuracy.textContent = '-';
+      updateSummary();
+      drawChart();
+      log('Data cleared.');
+    }
+
+    function exportCsv() {
+      const motionHeader = 'type,timestamp,x,y,z,magnitude,lat,lon,speed,accuracy,altitude,heading\n';
+      const motionRows = state.motionSamples.map(s =>
+        `motion,${s.iso},${s.x},${s.y},${s.z},${s.mag},,,,,,`
+      );
+      const gpsRows = state.gpsSamples.map(s =>
+        `gps,${s.iso},,,,,${s.lat},${s.lon},${s.speed ?? ''},${s.accuracy ?? ''},${s.altitude ?? ''},${s.heading ?? ''}`
+      );
+
+      const csv = motionHeader + [...motionRows, ...gpsRows].join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      a.href = url;
+      a.download = `sensor-data-${stamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      log('CSV exported.');
+    }
+
+    document.getElementById('startBtn').addEventListener('click', startSensors);
+    document.getElementById('stopBtn').addEventListener('click', stopSensors);
+    document.getElementById('clearBtn').addEventListener('click', clearData);
+    document.getElementById('exportBtn').addEventListener('click', exportCsv);
+    window.addEventListener('resize', drawChart);
+
+    drawChart();
+    updateSummary();
+    log('Ready. Tap Start sensors to begin.');
+  </script>
+</body>
+</html>
