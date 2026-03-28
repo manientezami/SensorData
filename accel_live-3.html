@@ -1,0 +1,1048 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accelerometer Monitor</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #ffffff;
+    --surface: #f7f7f5;
+    --border: #e0e0dc;
+    --text: #111111;
+    --muted: #888;
+    --x: #e03535;
+    --y: #1a7fe8;
+    --z: #159c5e;
+    --fft-x: #f08080;
+    --fft-y: #80b3f0;
+    --fft-z: #80d4aa;
+    --mono: 'JetBrains Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    padding: 18px 28px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .brand {
+    font-family: var(--mono);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .brand span { color: var(--muted); font-weight: 400; }
+
+  .status-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  #statusDot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #ccc;
+    display: inline-block;
+    transition: background 0.3s;
+  }
+  #statusDot.active { background: #159c5e; animation: pulse 1.4s infinite; }
+  #statusDot.error  { background: #e03535; }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+
+  #statusText {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+  }
+
+  button {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 7px 16px;
+    border: 1.5px solid var(--text);
+    background: var(--text);
+    color: #fff;
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.15s, color 0.15s;
+  }
+  button:hover { background: #333; }
+  button.secondary { background: transparent; color: var(--text); }
+  button.secondary:hover { background: var(--surface); }
+
+  .readout-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+  }
+
+  .readout {
+    padding: 12px 24px;
+    border-right: 1px solid var(--border);
+  }
+  .readout:last-child { border-right: none; }
+
+  .readout-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+  }
+  .readout-label.x { color: var(--x); }
+  .readout-label.y { color: var(--y); }
+  .readout-label.z { color: var(--z); }
+
+  .readout-value {
+    font-family: var(--mono);
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--text);
+    min-width: 90px;
+  }
+
+  .readout-unit {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 1px;
+  }
+
+  main {
+    flex: 1;
+    display: grid;
+    grid-template-rows: 1fr 1fr 1fr;
+    gap: 0;
+  }
+
+  .plot-panel {
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    min-height: 0;
+  }
+
+  .plot-panel:last-child { border-bottom: none; }
+
+  .plot-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .plot-title {
+    font-family: var(--mono);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text);
+  }
+
+  .plot-meta {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .legend {
+    display: flex;
+    gap: 16px;
+  }
+
+  .legend-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+  }
+
+  .legend-dot {
+    width: 8px; height: 2px;
+    border-radius: 1px;
+  }
+
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  #permissionOverlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(255,255,255,0.96);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    z-index: 100;
+    padding: 32px;
+    text-align: center;
+  }
+
+  #permissionOverlay h2 {
+    font-family: var(--mono);
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+
+  #permissionOverlay p {
+    font-size: 14px;
+    color: var(--muted);
+    max-width: 360px;
+    line-height: 1.6;
+  }
+
+  #fftControls {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .ctrl-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  select {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    background: var(--bg);
+    color: var(--text);
+    border-radius: 3px;
+    cursor: pointer;
+  }
+
+  @keyframes alarmPulse {
+    from { opacity: 1; transform: scale(1); }
+    to   { opacity: 0.5; transform: scale(1.2); }
+  }
+
+  footer {
+    padding: 8px 20px;
+    border-top: 1px solid var(--border);
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    display: flex;
+    justify-content: space-between;
+  }
+</style>
+</head>
+<body>
+
+<div id="permissionOverlay">
+  <h2>Accelerometer Monitor</h2>
+  <p>This page reads live accelerometer data from your device and plots the time-domain signal and FFT in real time.</p>
+  <button id="startBtn" onclick="requestPermission()">Enable Accelerometer</button>
+  <p id="permMsg" style="font-size:12px;"></p>
+</div>
+
+<header>
+  <div class="brand">Accel<span>Monitor</span></div>
+  <div class="status-row">
+    <span id="statusDot"></span>
+    <span id="statusText">Waiting for sensor…</span>
+    <button class="secondary" onclick="togglePause()" id="pauseBtn">Pause</button>
+    <button class="secondary" onclick="clearBuffers()">Clear</button>
+  </div>
+</header>
+
+<div class="readout-bar">
+  <div class="readout">
+    <div class="readout-label x">X-axis</div>
+    <div class="readout-value" id="vx">—</div>
+    <div class="readout-unit">m/s²</div>
+  </div>
+  <div class="readout">
+    <div class="readout-label y">Y-axis</div>
+    <div class="readout-value" id="vy">—</div>
+    <div class="readout-unit">m/s²</div>
+  </div>
+  <div class="readout">
+    <div class="readout-label z">Z-axis</div>
+    <div class="readout-value" id="vz">—</div>
+    <div class="readout-unit">m/s²</div>
+  </div>
+</div>
+
+<!-- Hunting Alarm Banner -->
+<div id="alarmBar" style="display:none; align-items:center; justify-content:space-between;
+  background:#e03535; color:#fff; padding:10px 24px; gap:12px; flex-wrap:wrap;">
+  <div style="display:flex; align-items:center; gap:12px;">
+    <span id="alarmIcon" style="font-size:18px; animation: alarmPulse 0.6s infinite alternate;">⚠</span>
+    <span id="alarmMsg" style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700;
+      letter-spacing:0.08em; text-transform:uppercase;"></span>
+  </div>
+  <button onclick="dismissAlarm()" style="background:rgba(255,255,255,0.2); border:1px solid rgba(255,255,255,0.5);
+    color:#fff; font-size:10px; padding:5px 12px;">Dismiss</button>
+</div>
+
+<!-- Displacement readout bar -->
+<div class="readout-bar" style="border-top:1px solid var(--border);">
+  <div class="readout">
+    <div class="readout-label x">Disp X</div>
+    <div class="readout-value" id="vdx">—</div>
+    <div class="readout-unit">mm</div>
+  </div>
+  <div class="readout">
+    <div class="readout-label y">Disp Y</div>
+    <div class="readout-value" id="vdy">—</div>
+    <div class="readout-unit">mm</div>
+  </div>
+  <div class="readout">
+    <div class="readout-label z">Disp Z</div>
+    <div class="readout-value" id="vdz">—</div>
+    <div class="readout-unit">mm</div>
+  </div>
+</div>
+
+<main>
+  <!-- Time Domain -->
+  <div class="plot-panel">
+    <div class="plot-header">
+      <div class="plot-title">Time Domain</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--x)"></div>X</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--y)"></div>Y</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--z)"></div>Z</div>
+      </div>
+      <div class="plot-meta" id="sampleRate">— Hz</div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="timePlot"></canvas>
+    </div>
+  </div>
+
+  <!-- FFT -->
+  <div class="plot-panel">
+    <div class="plot-header">
+      <div class="plot-title">FFT — Magnitude Spectrum</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--fft-x)"></div>X</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--fft-y)"></div>Y</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--fft-z)"></div>Z</div>
+      </div>
+      <div id="fftControls">
+        <span class="ctrl-label">N =</span>
+        <select id="fftSize" onchange="updateFFTSize()">
+          <option value="256">256</option>
+          <option value="512" selected>512</option>
+          <option value="1024">1024</option>
+        </select>
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="fftPlot"></canvas>
+    </div>
+  </div>
+  <!-- Displacement -->
+  <div class="plot-panel">
+    <div class="plot-header">
+      <div class="plot-title">Displacement — BP Filtered (0.3–15 Hz)</div>
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--x)"></div>X</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--y)"></div>Y</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--z)"></div>Z</div>
+      </div>
+      <div class="plot-meta">2× Butterworth IIR</div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="dispPlot"></canvas>
+    </div>
+  </div>
+</main>
+
+<footer>
+  <span id="sampleCount">0 samples</span>
+  <span>DeviceMotionEvent · m/s²</span>
+</footer>
+
+<script>
+// ─── Config ───────────────────────────────────────────────────────────────────
+const BUF_LEN   = 1024;       // ring buffer length
+let   FFT_N     = 512;        // FFT window size
+const MARGIN    = { t: 12, r: 20, b: 28, l: 46 };
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let bufX = new Float32Array(BUF_LEN);
+let bufY = new Float32Array(BUF_LEN);
+let bufZ = new Float32Array(BUF_LEN);
+
+// Displacement ring buffers (metres → displayed as mm)
+let bufDX = new Float32Array(BUF_LEN);
+let bufDY = new Float32Array(BUF_LEN);
+let bufDZ = new Float32Array(BUF_LEN);
+
+// Double-integration state per axis: [prevAccel, velocity, displacement]
+let intX = [0, 0, 0], intY = [0, 0, 0], intZ = [0, 0, 0];
+
+// Butterworth biquad coefficients — recomputed when sample rate stabilises
+// Each biquad: { b:[b0,b1,b2], a:[a1,a2] }  (a0 normalised out)
+let bqHP = null, bqLP = null;
+let lastFilterFs = 0;
+
+// Biquad Direct Form II Transposed filter states per axis
+// fltX/Y/Z[0] = HP state [s1,s2],  [1] = LP state [s1,s2]
+let fltX = [[0,0],[0,0]], fltY = [[0,0],[0,0]], fltZ = [[0,0],[0,0]];
+
+// ─── Butterworth biquad design ────────────────────────────────────────────────
+function butterHP(fc, fs) {
+  const Q = Math.SQRT1_2;           // 1/√2 → maximally flat (Butterworth)
+  const w0 = 2 * Math.PI * fc / fs;
+  const cosw = Math.cos(w0), sinw = Math.sin(w0);
+  const alpha = sinw / (2 * Q);
+  const a0inv = 1 / (1 + alpha);
+  return {
+    b: [ (1 + cosw) / 2 * a0inv,
+        -(1 + cosw)     * a0inv,
+         (1 + cosw) / 2 * a0inv ],
+    a: [ -2 * cosw      * a0inv,
+         (1 - alpha)    * a0inv ]
+  };
+}
+
+function butterLP(fc, fs) {
+  const Q = Math.SQRT1_2;
+  const w0 = 2 * Math.PI * fc / fs;
+  const cosw = Math.cos(w0), sinw = Math.sin(w0);
+  const alpha = sinw / (2 * Q);
+  const a0inv = 1 / (1 + alpha);
+  return {
+    b: [ (1 - cosw) / 2 * a0inv,
+         (1 - cosw)     * a0inv,
+         (1 - cosw) / 2 * a0inv ],
+    a: [ -2 * cosw      * a0inv,
+         (1 - alpha)    * a0inv ]
+  };
+}
+
+// Direct Form II Transposed — processes one sample, mutates state in-place
+function bqStep(bq, state, x) {
+  const y    = bq.b[0] * x + state[0];
+  state[0]   = bq.b[1] * x - bq.a[0] * y + state[1];
+  state[1]   = bq.b[2] * x - bq.a[1] * y;
+  return y;
+}
+
+// Cascade HP → LP (bandpass)
+function bpFilter(x, flt) {
+  if (!bqHP || !bqLP) return x;
+  return bqStep(bqLP, flt[1], bqStep(bqHP, flt[0], x));
+}
+
+function recomputeFilters(fs) {
+  if (Math.abs(fs - lastFilterFs) < 1) return;  // no change
+  lastFilterFs = fs;
+  bqHP = butterHP(0.3, fs);
+  bqLP = butterLP(15.0, fs);
+  // Reset filter states on coefficient change to avoid transient blow-up
+  fltX = [[0,0],[0,0]]; fltY = [[0,0],[0,0]]; fltZ = [[0,0],[0,0]];
+  intX = [0,0,0]; intY = [0,0,0]; intZ = [0,0,0];
+}
+let head = 0, totalSamples = 0;
+let paused = false;
+let sampleRateEst = 0;
+let lastTs = null, tsAccum = 0, tsCount = 0;
+let animId = null;
+
+// ─── Canvas refs ─────────────────────────────────────────────────────────────
+const tcv  = document.getElementById('timePlot');
+const fcv  = document.getElementById('fftPlot');
+const dcv  = document.getElementById('dispPlot');
+const tctx = tcv.getContext('2d');
+const fctx = fcv.getContext('2d');
+const dctx = dcv.getContext('2d');
+
+function resize() {
+  [tcv, fcv, dcv].forEach(cv => {
+    const wrap = cv.parentElement;
+    const dpr  = window.devicePixelRatio || 1;
+    cv.width   = wrap.clientWidth  * dpr;
+    cv.height  = wrap.clientHeight * dpr;
+    cv.getContext('2d').scale(dpr, dpr);
+    cv._w = wrap.clientWidth;
+    cv._h = wrap.clientHeight;
+  });
+}
+window.addEventListener('resize', () => { resize(); });
+setTimeout(resize, 100);
+
+// ─── Permission ───────────────────────────────────────────────────────────────
+function requestPermission() {
+  if (typeof DeviceMotionEvent !== 'undefined' &&
+      typeof DeviceMotionEvent.requestPermission === 'function') {
+    DeviceMotionEvent.requestPermission()
+      .then(r => {
+        if (r === 'granted') startListening();
+        else document.getElementById('permMsg').textContent = 'Permission denied.';
+      })
+      .catch(e => document.getElementById('permMsg').textContent = e.message);
+  } else if (typeof DeviceMotionEvent !== 'undefined') {
+    startListening();
+  } else {
+    document.getElementById('permMsg').textContent =
+      'DeviceMotionEvent not supported on this device/browser.';
+  }
+}
+
+function startListening() {
+  document.getElementById('permissionOverlay').style.display = 'none';
+  window.addEventListener('devicemotion', onMotion, true);
+  document.getElementById('statusDot').className = 'active';
+  document.getElementById('statusText').textContent = 'Live';
+  if (!animId) animId = requestAnimationFrame(renderLoop);
+}
+
+// ─── Motion handler ───────────────────────────────────────────────────────────
+function onMotion(e) {
+  if (paused) return;
+  const a = e.accelerationIncludingGravity || e.acceleration;
+  if (!a) return;
+
+  const x = a.x ?? 0;
+  const y = a.y ?? 0;
+  const z = a.z ?? 0;
+
+  bufX[head] = x; bufY[head] = y; bufZ[head] = z;
+
+  // ── Double integration → displacement ──────────────────────────────────────
+  const now2 = performance.now();
+  const dt = (lastTs !== null) ? Math.min((now2 - lastTs) / 1000, 0.05) : (1 / 50);
+
+  function integrate(s, a) {
+    // Trapezoidal: velocity then displacement
+    const v = s[1] + (s[0] + a) * 0.5 * dt;   // s[0]=prevA, s[1]=vel, s[2]=disp
+    const d = s[2] + (s[1] + v)  * 0.5 * dt;
+    s[0] = a; s[1] = v; s[2] = d;
+    return d;
+  }
+
+  const dxRaw = integrate(intX, x);
+  const dyRaw = integrate(intY, y);
+  const dzRaw = integrate(intZ, z);
+
+  // Recompute Butterworth coefficients if sample rate has settled
+  if (sampleRateEst > 0) recomputeFilters(sampleRateEst);
+
+  const dx = bpFilter(dxRaw, fltX);   // metres
+  const dy = bpFilter(dyRaw, fltY);
+  const dz = bpFilter(dzRaw, fltZ);
+
+  bufDX[head] = dx; bufDY[head] = dy; bufDZ[head] = dz;
+
+  head = (head + 1) % BUF_LEN;
+  totalSamples++;
+
+  // sample rate estimate
+  const now = now2;
+  if (lastTs !== null) {
+    tsAccum += (now - lastTs);
+    tsCount++;
+    if (tsCount >= 30) {
+      sampleRateEst = Math.round(1000 / (tsAccum / tsCount));
+      tsAccum = 0; tsCount = 0;
+      document.getElementById('sampleRate').textContent = sampleRateEst + ' Hz';
+    }
+  }
+  lastTs = now;
+
+  // live readout
+  document.getElementById('vx').textContent = x.toFixed(3);
+  document.getElementById('vy').textContent = y.toFixed(3);
+  document.getElementById('vz').textContent = z.toFixed(3);
+  document.getElementById('vdx').textContent = (dx * 1000).toFixed(3);
+  document.getElementById('vdy').textContent = (dy * 1000).toFixed(3);
+  document.getElementById('vdz').textContent = (dz * 1000).toFixed(3);
+  document.getElementById('sampleCount').textContent = totalSamples.toLocaleString() + ' samples';
+}
+
+// ─── Get ordered buffer ───────────────────────────────────────────────────────
+function getOrdered(buf) {
+  const out = new Float32Array(BUF_LEN);
+  for (let i = 0; i < BUF_LEN; i++) out[i] = buf[(head + i) % BUF_LEN];
+  return out;
+}
+
+// ─── FFT (Cooley-Tukey, radix-2) ─────────────────────────────────────────────
+function fft(re, im) {
+  const n = re.length;
+  // bit-reversal
+  let j = 0;
+  for (let i = 1; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) {
+      [re[i], re[j]] = [re[j], re[i]];
+      [im[i], im[j]] = [im[j], im[i]];
+    }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len;
+    const wRe = Math.cos(ang), wIm = Math.sin(ang);
+    for (let i = 0; i < n; i += len) {
+      let curRe = 1, curIm = 0;
+      for (let k = 0; k < len / 2; k++) {
+        const uRe = re[i+k], uIm = im[i+k];
+        const vRe = re[i+k+len/2]*curRe - im[i+k+len/2]*curIm;
+        const vIm = re[i+k+len/2]*curIm + im[i+k+len/2]*curRe;
+        re[i+k]         = uRe + vRe; im[i+k]         = uIm + vIm;
+        re[i+k+len/2]   = uRe - vRe; im[i+k+len/2]   = uIm - vIm;
+        const tmp = curRe*wRe - curIm*wIm;
+        curIm = curRe*wIm + curIm*wRe;
+        curRe = tmp;
+      }
+    }
+  }
+}
+
+// Hann window
+function hannWindow(n) {
+  const w = new Float32Array(n);
+  for (let i = 0; i < n; i++) w[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (n - 1)));
+  return w;
+}
+
+function computeFFT(signal) {
+  const n   = FFT_N;
+  const win = hannWindow(n);
+  const re  = new Float32Array(n);
+  const im  = new Float32Array(n);
+  const src = signal.slice(signal.length - n);
+
+  // Remove DC offset (subtract mean)
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += (src[i] || 0);
+  mean /= n;
+
+  for (let i = 0; i < n; i++) { re[i] = ((src[i] || 0) - mean) * win[i]; im[i] = 0; }
+  fft(re, im);
+  const mag = new Float32Array(n / 2);
+  for (let i = 0; i < n / 2; i++) mag[i] = Math.sqrt(re[i]*re[i] + im[i]*im[i]) / n;
+  return mag;
+}
+
+// ─── Hunting detection ────────────────────────────────────────────────────────
+const HUNT_THRESHOLD = 2.0;   // m/s²  magnitude threshold
+const HUNT_F_LOW     = 1.0;   // Hz
+const HUNT_F_HIGH    = 10.0;  // Hz
+let huntingActive    = false;
+let huntingFlash     = 0;
+
+function checkHunting(mx, my, mz) {
+  const sr = sampleRateEst || 50;
+  const binLow  = Math.ceil(HUNT_F_LOW  * FFT_N / sr);
+  const binHigh = Math.floor(HUNT_F_HIGH * FFT_N / sr);
+
+  let peakVal = 0, peakFreq = 0, peakAxis = '';
+  [{ m: mx, l: 'X' }, { m: my, l: 'Y' }, { m: mz, l: 'Z' }].forEach(({ m, l }) => {
+    for (let i = binLow; i <= Math.min(binHigh, m.length - 1); i++) {
+      if (m[i] > peakVal) { peakVal = m[i]; peakFreq = i * sr / FFT_N; peakAxis = l; }
+    }
+  });
+
+  const triggered = peakVal >= HUNT_THRESHOLD;
+  if (triggered !== huntingActive) {
+    huntingActive = triggered;
+    updateAlarmUI(triggered, peakFreq, peakVal, peakAxis);
+  } else if (triggered) {
+    // refresh values if still active
+    updateAlarmUI(true, peakFreq, peakVal, peakAxis);
+  }
+  return { triggered, peakFreq, peakVal, peakAxis };
+}
+
+function updateAlarmUI(active, freq, val, axis) {
+  const bar = document.getElementById('alarmBar');
+  if (active) {
+    bar.style.display = 'flex';
+    document.getElementById('alarmMsg').textContent =
+      `HUNTING DETECTED — ${freq.toFixed(2)} Hz on ${axis}-axis  |  ${(val * 2).toFixed(3)} m/s² pk-pk`;
+    huntingFlash++;
+    startSiren();
+  } else {
+    bar.style.display = 'none';
+    huntingFlash = 0;
+    stopSiren();
+  }
+}
+
+// ─── Drawing helpers ──────────────────────────────────────────────────────────
+function drawGrid(ctx, W, H, nX, nY, labels) {
+  ctx.strokeStyle = '#ebebeb';
+  ctx.lineWidth = 1;
+  ctx.fillStyle = '#aaa';
+  ctx.font = '9px JetBrains Mono, monospace';
+  const pw = W - MARGIN.l - MARGIN.r;
+  const ph = H - MARGIN.t - MARGIN.b;
+
+  for (let i = 0; i <= nX; i++) {
+    const x = MARGIN.l + (pw / nX) * i;
+    ctx.beginPath(); ctx.moveTo(x, MARGIN.t); ctx.lineTo(x, MARGIN.t + ph);
+    ctx.stroke();
+    if (labels && labels.x) {
+      ctx.textAlign = 'center';
+      ctx.fillText(labels.x(i, nX), x, MARGIN.t + ph + 14);
+    }
+  }
+  for (let i = 0; i <= nY; i++) {
+    const y = MARGIN.t + (ph / nY) * i;
+    ctx.beginPath(); ctx.moveTo(MARGIN.l, y); ctx.lineTo(MARGIN.l + pw, y);
+    ctx.stroke();
+    if (labels && labels.y) {
+      ctx.textAlign = 'right';
+      ctx.fillText(labels.y(i, nY), MARGIN.l - 4, y + 3);
+    }
+  }
+}
+
+function drawSignal(ctx, W, H, data, color, yMin, yMax) {
+  const pw = W - MARGIN.l - MARGIN.r;
+  const ph = H - MARGIN.t - MARGIN.b;
+  const n  = data.length;
+  const range = yMax - yMin || 1;
+
+  ctx.strokeStyle = color;
+  ctx.lineWidth   = 1.5;
+  ctx.beginPath();
+  for (let i = 0; i < n; i++) {
+    const px = MARGIN.l + (i / (n - 1)) * pw;
+    const py = MARGIN.t + ph - ((data[i] - yMin) / range) * ph;
+    i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+  }
+  ctx.stroke();
+}
+
+// ─── Render loop ──────────────────────────────────────────────────────────────
+function renderLoop() {
+  animId = requestAnimationFrame(renderLoop);
+  if (totalSamples < 4) return;
+  drawTime();
+  drawFFT();
+  drawDisp();
+}
+
+function drawTime() {
+  const W = tcv._w || tcv.width;
+  const H = tcv._h || tcv.height;
+  tctx.clearRect(0, 0, W, H);
+
+  const ox = getOrdered(bufX);
+  const oy = getOrdered(bufY);
+  const oz = getOrdered(bufZ);
+
+  // dynamic range
+  let mn = Infinity, mx = -Infinity;
+  [ox, oy, oz].forEach(d => d.forEach(v => { if (v<mn) mn=v; if (v>mx) mx=v; }));
+  const pad = (mx - mn) * 0.1 || 1;
+  mn -= pad; mx += pad;
+
+  const sr = sampleRateEst || 50;
+  drawGrid(tctx, W, H, 8, 4, {
+    x: (i, n) => { const secs = (BUF_LEN / sr) * (i / n); return secs.toFixed(1) + 's'; },
+    y: (i, n) => { const v = mx - (i / n) * (mx - mn); return v.toFixed(1); }
+  });
+
+  // axis lines
+  tctx.strokeStyle = '#ccc'; tctx.lineWidth = 1;
+  const zeroY = MARGIN.t + (tcv._h - MARGIN.t - MARGIN.b) * (mx / (mx - mn));
+  tctx.beginPath(); tctx.moveTo(MARGIN.l, zeroY); tctx.lineTo(W - MARGIN.r, zeroY); tctx.stroke();
+
+  drawSignal(tctx, W, H, ox, getComputedStyle(document.documentElement).getPropertyValue('--x').trim() || '#e03535', mn, mx);
+  drawSignal(tctx, W, H, oy, getComputedStyle(document.documentElement).getPropertyValue('--y').trim() || '#1a7fe8', mn, mx);
+  drawSignal(tctx, W, H, oz, getComputedStyle(document.documentElement).getPropertyValue('--z').trim() || '#159c5e', mn, mx);
+
+  // axis label
+  tctx.fillStyle = '#aaa'; tctx.font = '9px JetBrains Mono, monospace'; tctx.textAlign = 'left';
+  tctx.fillText('m/s²', 2, MARGIN.t + 4);
+}
+
+function drawFFT() {
+  const W = fcv._w || fcv.width;
+  const H = fcv._h || fcv.height;
+  fctx.clearRect(0, 0, W, H);
+
+  const ox = getOrdered(bufX);
+  const oy = getOrdered(bufY);
+  const oz = getOrdered(bufZ);
+
+  const mx = computeFFT(ox);
+  const my = computeFFT(oy);
+  const mz = computeFFT(oz);
+
+  const sr   = sampleRateEst || 50;
+  const fMax = sr / 2;
+  let   yMax = 0;
+  [mx, my, mz].forEach(m => m.forEach(v => { if (v > yMax) yMax = v; }));
+  yMax = yMax * 1.15 || 1;
+
+  drawGrid(fctx, W, H, 8, 4, {
+    x: (i, n) => { return (fMax * i / n).toFixed(0) + 'Hz'; },
+    y: (i, n) => { const v = yMax * (1 - i / n); return v < 0.001 ? '0' : v.toFixed(3); }
+  });
+
+  // Shade 1–10 Hz hunting band
+  const pw2 = W - MARGIN.l - MARGIN.r;
+  const ph2 = H - MARGIN.t - MARGIN.b;
+  const sr2  = sampleRateEst || 50;
+  const bx1 = MARGIN.l + (HUNT_F_LOW  / (sr2 / 2)) * pw2;
+  const bx2 = MARGIN.l + (HUNT_F_HIGH / (sr2 / 2)) * pw2;
+  fctx.fillStyle = huntingActive
+    ? `rgba(224,53,53,${0.07 + 0.06 * Math.sin(huntingFlash * 0.4)})`
+    : 'rgba(255,200,0,0.06)';
+  fctx.fillRect(bx1, MARGIN.t, bx2 - bx1, ph2);
+  fctx.strokeStyle = huntingActive ? 'rgba(224,53,53,0.35)' : 'rgba(200,160,0,0.25)';
+  fctx.lineWidth = 1; fctx.setLineDash([4,3]);
+  fctx.strokeRect(bx1, MARGIN.t, bx2 - bx1, ph2);
+  fctx.setLineDash([]);
+  fctx.fillStyle = huntingActive ? 'rgba(224,53,53,0.6)' : 'rgba(180,140,0,0.5)';
+  fctx.font = '8px JetBrains Mono, monospace'; fctx.textAlign = 'left';
+  fctx.fillText('HUNT BAND', bx1 + 3, MARGIN.t + 10);
+
+  // Run hunting check
+  checkHunting(mx, my, mz);
+
+  const root = getComputedStyle(document.documentElement);
+  drawSignal(fctx, W, H, mx, root.getPropertyValue('--fft-x').trim() || '#f08080', 0, yMax);
+  drawSignal(fctx, W, H, my, root.getPropertyValue('--fft-y').trim() || '#80b3f0', 0, yMax);
+  drawSignal(fctx, W, H, mz, root.getPropertyValue('--fft-z').trim() || '#80d4aa', 0, yMax);
+
+  // Draw threshold line inside hunting band
+  const threshY = MARGIN.t + ph2 - (HUNT_THRESHOLD / yMax) * ph2;
+  if (threshY > MARGIN.t && threshY < MARGIN.t + ph2) {
+    fctx.strokeStyle = 'rgba(224,53,53,0.5)'; fctx.lineWidth = 1; fctx.setLineDash([5,3]);
+    fctx.beginPath(); fctx.moveTo(bx1, threshY); fctx.lineTo(bx2, threshY); fctx.stroke();
+    fctx.setLineDash([]);
+    fctx.fillStyle = 'rgba(224,53,53,0.6)'; fctx.font = '8px JetBrains Mono, monospace';
+    fctx.textAlign = 'right';
+    fctx.fillText('2.0 m/s²', bx2 - 3, threshY - 3);
+  }
+
+  // peak annotation on dominant channel
+  const allMag = [
+    { m: mx, c: '#e03535', label: 'X' },
+    { m: my, c: '#1a7fe8', label: 'Y' },
+    { m: mz, c: '#159c5e', label: 'Z' },
+  ];
+  let pkVal = 0, pkIdx = 0, pkCh = null;
+  allMag.forEach(({ m, c, label }) => {
+    for (let i = 1; i < m.length; i++) {
+      if (m[i] > pkVal) { pkVal = m[i]; pkIdx = i; pkCh = { c, label }; }
+    }
+  });
+  if (pkCh && pkVal > 0.001) {
+    const pw = W - MARGIN.l - MARGIN.r;
+    const ph = H - MARGIN.t - MARGIN.b;
+    const px = MARGIN.l + (pkIdx / (FFT_N / 2)) * pw;
+    const py = MARGIN.t + ph - (pkVal / yMax) * ph;
+    const freq = (pkIdx / FFT_N * sr).toFixed(1);
+    fctx.strokeStyle = pkCh.c; fctx.lineWidth = 1;
+    fctx.setLineDash([3, 3]);
+    fctx.beginPath(); fctx.moveTo(px, py); fctx.lineTo(px, MARGIN.t + ph); fctx.stroke();
+    fctx.setLineDash([]);
+    fctx.fillStyle = pkCh.c;
+    fctx.font = 'bold 9px JetBrains Mono, monospace';
+    fctx.textAlign = px > W / 2 ? 'right' : 'left';
+    fctx.fillText(`${freq} Hz (${pkCh.label})`, px + (px > W/2 ? -4 : 4), py - 4);
+  }
+
+  fctx.fillStyle = '#aaa'; fctx.font = '9px JetBrains Mono, monospace'; fctx.textAlign = 'left';
+  fctx.fillText('mag', 2, MARGIN.t + 4);
+}
+
+function drawDisp() {
+  const W = dcv._w || dcv.width;
+  const H = dcv._h || dcv.height;
+  dctx.clearRect(0, 0, W, H);
+
+  const odx = getOrdered(bufDX);
+  const ody = getOrdered(bufDY);
+  const odz = getOrdered(bufDZ);
+
+  // Convert to mm for display
+  const toMm = v => v * 1000;
+  const dxMm = odx.map(toMm);
+  const dyMm = ody.map(toMm);
+  const dzMm = odz.map(toMm);
+
+  let mn = Infinity, mx = -Infinity;
+  [dxMm, dyMm, dzMm].forEach(d => d.forEach(v => {
+    if (isFinite(v)) { if (v < mn) mn = v; if (v > mx) mx = v; }
+  }));
+  if (!isFinite(mn) || mn === mx) { mn = -1; mx = 1; }
+  const pad = (mx - mn) * 0.12 || 0.1;
+  mn -= pad; mx += pad;
+
+  const sr = sampleRateEst || 50;
+  drawGrid(dctx, W, H, 8, 4, {
+    x: (i, n) => { const s = (BUF_LEN / sr) * (i / n); return s.toFixed(1) + 's'; },
+    y: (i, n) => { const v = mx - (i / n) * (mx - mn); return v.toFixed(2); }
+  });
+
+  // Zero line
+  const ph = H - MARGIN.t - MARGIN.b;
+  const zeroY = MARGIN.t + ph * (mx / (mx - mn));
+  dctx.strokeStyle = '#ccc'; dctx.lineWidth = 1;
+  dctx.beginPath(); dctx.moveTo(MARGIN.l, zeroY); dctx.lineTo(W - MARGIN.r, zeroY); dctx.stroke();
+
+  drawSignal(dctx, W, H, dxMm, '#e03535', mn, mx);
+  drawSignal(dctx, W, H, dyMm, '#1a7fe8', mn, mx);
+  drawSignal(dctx, W, H, dzMm, '#159c5e', mn, mx);
+
+  dctx.fillStyle = '#aaa'; dctx.font = '9px JetBrains Mono, monospace'; dctx.textAlign = 'left';
+  dctx.fillText('mm', 2, MARGIN.t + 4);
+}
+
+// ─── Siren (Web Audio API) ────────────────────────────────────────────────────
+let audioCtx    = null;
+let sirenOsc    = null;
+let sirenGain   = null;
+let sirenLfo    = null;
+let sirenActive = false;
+
+function getSirenCtx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return audioCtx;
+}
+
+function startSiren() {
+  if (sirenActive) return;
+  sirenActive = true;
+  const ctx = getSirenCtx();
+  if (ctx.state === 'suspended') ctx.resume();
+
+  sirenOsc = ctx.createOscillator();
+  sirenOsc.type = 'sawtooth';
+  sirenOsc.frequency.setValueAtTime(600, ctx.currentTime);
+
+  sirenLfo = ctx.createOscillator();
+  sirenLfo.type = 'sine';
+  sirenLfo.frequency.setValueAtTime(0.7, ctx.currentTime);
+
+  const lfoGain = ctx.createGain();
+  lfoGain.gain.setValueAtTime(250, ctx.currentTime);
+  sirenLfo.connect(lfoGain);
+  lfoGain.connect(sirenOsc.frequency);
+
+  const wave = ctx.createWaveShaper();
+  const curve = new Float32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const x = (i * 2) / 256 - 1;
+    curve[i] = (Math.PI + 30) * x / (Math.PI + 30 * Math.abs(x));
+  }
+  wave.curve = curve;
+
+  sirenGain = ctx.createGain();
+  sirenGain.gain.setValueAtTime(0, ctx.currentTime);
+  sirenGain.gain.linearRampToValueAtTime(0.18, ctx.currentTime + 0.15);
+
+  sirenOsc.connect(wave);
+  wave.connect(sirenGain);
+  sirenGain.connect(ctx.destination);
+
+  sirenOsc.start();
+  sirenLfo.start();
+}
+
+function stopSiren() {
+  if (!sirenActive || !sirenGain) return;
+  sirenActive = false;
+  const ctx = getSirenCtx();
+  sirenGain.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.3);
+  setTimeout(() => {
+    try { sirenOsc.stop(); sirenLfo.stop(); } catch(e) {}
+    sirenOsc = null; sirenLfo = null; sirenGain = null;
+  }, 350);
+}
+
+// ─── Controls ─────────────────────────────────────────────────────────────────
+function dismissAlarm() {
+  document.getElementById('alarmBar').style.display = 'none';
+  huntingActive = false;
+  stopSiren();
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  btn.textContent = paused ? 'Resume' : 'Pause';
+  document.getElementById('statusDot').className = paused ? '' : 'active';
+  document.getElementById('statusText').textContent = paused ? 'Paused' : 'Live';
+}
+
+function clearBuffers() {
+  bufX.fill(0); bufY.fill(0); bufZ.fill(0);
+  bufDX.fill(0); bufDY.fill(0); bufDZ.fill(0);
+  intX = [0,0,0]; intY = [0,0,0]; intZ = [0,0,0];
+  fltX = [[0,0],[0,0]]; fltY = [[0,0],[0,0]]; fltZ = [[0,0],[0,0]];
+  head = 0; totalSamples = 0;
+  lastTs = null; tsAccum = 0; tsCount = 0;
+  document.getElementById('sampleCount').textContent = '0 samples';
+}
+
+function updateFFTSize() {
+  FFT_N = parseInt(document.getElementById('fftSize').value);
+}
+
+// ─── Auto-start if permission already granted (non-iOS) ───────────────────────
+if (typeof DeviceMotionEvent !== 'undefined' &&
+    typeof DeviceMotionEvent.requestPermission !== 'function') {
+  startListening();
+}
+</script>
+</body>
+</html>
